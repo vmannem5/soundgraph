@@ -15,6 +15,7 @@ async function getAccessToken(): Promise<string> {
       ).toString('base64')}`,
     },
     body: 'grant_type=client_credentials',
+    cache: 'no-store',
   })
 
   const data = await res.json()
@@ -27,6 +28,7 @@ async function spotifyFetch<T>(path: string): Promise<T> {
   const token = await getAccessToken()
   const res = await fetch(`https://api.spotify.com/v1${path}`, {
     headers: { Authorization: `Bearer ${token}` },
+    cache: 'no-store',
   })
 
   if (!res.ok) {

@@ -30,6 +30,7 @@ async function mbFetchWithCurl<T>(url: URL): Promise<T> {
 async function mbFetchWithFetch<T>(url: URL): Promise<T> {
   const res = await fetch(url.toString(), {
     headers: { 'User-Agent': USER_AGENT },
+    cache: 'no-store',
   })
 
   if (!res.ok) {

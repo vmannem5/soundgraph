@@ -4,6 +4,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
 
+export const dynamic = 'force-dynamic'
+
 interface ArtistPageProps {
   params: Promise<{ mbid: string }>
 }

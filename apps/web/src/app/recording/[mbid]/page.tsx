@@ -5,6 +5,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
 
+export const dynamic = 'force-dynamic'
+
 interface RecordingPageProps {
   params: Promise<{ mbid: string }>
 }

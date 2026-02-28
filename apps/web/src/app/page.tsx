@@ -3,6 +3,8 @@ import { SearchBar } from '@/components/search-bar'
 import { SearchResults } from '@/components/search-results'
 import { searchAll } from '@/lib/data-service'
 
+export const dynamic = 'force-dynamic'
+
 interface HomeProps {
   searchParams: Promise<{ q?: string }>
 }
