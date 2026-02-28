@@ -1,0 +1,10 @@
+{
+  "name": "soundgraph",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @soundgraph/web dev",
+    "build": "pnpm --filter @soundgraph/web build",
+    "lint": "pnpm --filter @soundgraph/web lint"
+  }
+}
