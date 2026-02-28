@@ -17,14 +17,23 @@ export default async function ReleaseGroupPage({ params }: ReleaseGroupPageProps
     try {
         releaseGroup = await mb.getReleaseGroup(id)
     } catch {
-        return (
-            <main className="max-w-4xl mx-auto px-4 py-8 space-y-4">
-                <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-                    &larr; Back to search
-                </Link>
-                <p className="text-muted-foreground">Failed to load release group. Please try again.</p>
-            </main>
-        )
+        // Retry once after a delay (MusicBrainz rate limit is 1 req/sec)
+        try {
+            await new Promise(r => setTimeout(r, 1500))
+            releaseGroup = await mb.getReleaseGroup(id)
+        } catch {
+            return (
+                <main className="max-w-4xl mx-auto px-4 py-8 space-y-4">
+                    <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
+                        &larr; Back to search
+                    </Link>
+                    <p className="text-muted-foreground">
+                        Failed to load release group — MusicBrainz may be rate-limiting requests.{' '}
+                        <a href={`/release-group/${id}`} className="underline hover:text-foreground">Try again</a>
+                    </p>
+                </main>
+            )
+        }
     }
 
     const artistName = releaseGroup['artist-credit']
