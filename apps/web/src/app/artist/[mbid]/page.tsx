@@ -38,19 +38,23 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
     <main className="max-w-4xl mx-auto px-4 py-8 space-y-8">
       <Link
         href="/"
-        className="text-sm text-muted-foreground hover:text-foreground"
+        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         &larr; Back to search
       </Link>
 
-      <Card>
+      <Card className="overflow-hidden">
         <CardContent className="flex flex-col md:flex-row gap-6 p-6">
-          {artist.spotifyData?.images?.[0] && (
+          {artist.spotifyData?.images?.[0] ? (
             <img
               src={artist.spotifyData.images[0].url}
               alt={artist.name}
-              className="w-40 h-40 rounded-full object-cover"
+              className="w-40 h-40 rounded-full object-cover ring-4 ring-border shadow-xl"
             />
+          ) : (
+            <div className="w-40 h-40 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-5xl font-bold shadow-xl">
+              {artist.name?.[0]?.toUpperCase() || '?'}
+            </div>
           )}
           <div className="flex-1 space-y-3">
             <h1 className="text-4xl font-bold">{artist.name}</h1>
@@ -66,21 +70,28 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
                 <Badge variant="secondary">
                   {artist['life-span'].begin}
                   {artist['life-span'].end
-                    ? ` - ${artist['life-span'].end}`
-                    : ' - present'}
+                    ? ` – ${artist['life-span'].end}`
+                    : ' – present'}
                 </Badge>
               )}
             </div>
-            <div className="flex gap-1 flex-wrap">
-              {[...spotifyGenres, ...tags.map((t: any) => t.name)]
-                .filter((v, i, a) => a.indexOf(v) === i)
-                .slice(0, 12)
-                .map((tag) => (
-                  <Badge key={tag} variant="outline" className="text-xs">
-                    {tag}
-                  </Badge>
-                ))}
-            </div>
+            {(spotifyGenres.length > 0 || tags.length > 0) && (
+              <div className="flex gap-1 flex-wrap pt-2">
+                {[...spotifyGenres, ...tags.map((t: any) => t.name)]
+                  .filter((v, i, a) => a.indexOf(v) === i)
+                  .slice(0, 12)
+                  .map((tag) => (
+                    <Badge key={tag} variant="outline" className="text-xs">
+                      {tag}
+                    </Badge>
+                  ))}
+              </div>
+            )}
+            {artist.spotifyData?.followers?.total && (
+              <p className="text-sm text-muted-foreground pt-1">
+                {artist.spotifyData.followers.total.toLocaleString()} Spotify followers
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -90,21 +101,25 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
           <CardTitle>Discography</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
+          <div className="space-y-1">
             {releaseGroups['release-groups']?.map((rg: any) => (
-              <div
+              <Link
                 key={rg.id}
-                className="flex justify-between items-center py-2 border-b last:border-0 px-2 rounded"
+                href={`/release-group/${rg.id}`}
+                className="flex justify-between items-center py-3 px-3 rounded-lg hover:bg-accent/50 transition-all group"
               >
                 <div>
-                  <p className="font-medium">{rg.title}</p>
+                  <p className="font-medium group-hover:text-primary transition-colors">{rg.title}</p>
                   <p className="text-sm text-muted-foreground">
                     {rg['first-release-date'] || 'Unknown date'}
                   </p>
                 </div>
                 <Badge variant="outline">{rg['primary-type'] || 'Release'}</Badge>
-              </div>
+              </Link>
             ))}
+            {!releaseGroups['release-groups']?.length && (
+              <p className="text-muted-foreground text-sm py-4">No releases found.</p>
+            )}
           </div>
         </CardContent>
       </Card>

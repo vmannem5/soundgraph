@@ -1,6 +1,7 @@
 import { getRecordingConnections } from '@/lib/data-service'
 import { KnowledgeGraph } from '@/components/knowledge-graph'
 import { RecordingHeader } from '@/components/recording-header'
+import { SpotifyEmbed } from '@/components/spotify-embed'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
@@ -41,19 +42,28 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
     (c) => c.targetType === 'recording'
   )
 
+  // Extract Spotify track ID if available
+  const spotifyTrackId = recording.spotifyData?.id ||
+    recording.spotifyData?.external_urls?.spotify?.match(/track\/([a-zA-Z0-9]+)/)?.[1]
+
   return (
     <main className="max-w-6xl mx-auto px-4 py-8 space-y-8">
       <Link
         href="/"
-        className="text-sm text-muted-foreground hover:text-foreground"
+        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         &larr; Back to search
       </Link>
 
       <RecordingHeader recording={recording} connections={connections} />
 
+      {/* Spotify Embedded Player */}
+      {spotifyTrackId && (
+        <SpotifyEmbed trackId={spotifyTrackId} />
+      )}
+
       <Tabs defaultValue="graph" className="w-full">
-        <TabsList>
+        <TabsList className="bg-muted/50">
           <TabsTrigger value="graph">Mind Map</TabsTrigger>
           <TabsTrigger value="credits">Credits ({credits.length})</TabsTrigger>
           <TabsTrigger value="performers">
@@ -93,6 +103,9 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
                     </span>
                   </div>
                 ))}
+                {credits.length === 0 && (
+                  <p className="text-muted-foreground text-sm">No credits found.</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -121,6 +134,9 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
                     </span>
                   </div>
                 ))}
+                {performers.length === 0 && (
+                  <p className="text-muted-foreground text-sm">No performers found.</p>
+                )}
               </div>
             </CardContent>
           </Card>
