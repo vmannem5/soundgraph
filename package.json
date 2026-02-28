@@ -6,5 +6,12 @@
     "dev": "pnpm --filter @soundgraph/web dev",
     "build": "pnpm --filter @soundgraph/web build",
     "lint": "pnpm --filter @soundgraph/web lint"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma"
+    ]
   }
 }

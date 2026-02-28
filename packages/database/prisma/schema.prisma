@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// === Core Entities (cached from MusicBrainz) ===
+
+model Artist {
+  id          String   @id @default(cuid())
+  mbid        String   @unique  // MusicBrainz ID (UUID)
+  spotifyId   String?  @unique
+  name        String
+  sortName    String?
+  type        String?  // Person, Group, Orchestra, etc.
+  country     String?
+  disambiguation String?
+  imageUrl    String?
+  popularity  Int?     // From Spotify
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  credits     Credit[]
+  tags        ArtistTag[]
+  aliases     ArtistAlias[]
+
+  @@index([name])
+  @@index([mbid])
+}
+
+model Recording {
+  id          String   @id @default(cuid())
+  mbid        String   @unique
+  spotifyId   String?  @unique
+  isrc        String?
+  title       String
+  length      Int?     // Duration in ms
+  imageUrl    String?
+  previewUrl  String?
+  popularity  Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  credits     Credit[]
+  tags        RecordingTag[]
+  samplesUsed SampleRelation[] @relation("SamplingTrack")
+  sampledBy   SampleRelation[] @relation("SampledTrack")
+  releases    ReleaseRecording[]
+
+  @@index([title])
+  @@index([mbid])
+  @@index([isrc])
+}
+
+model ReleaseGroup {
+  id          String   @id @default(cuid())
+  mbid        String   @unique
+  spotifyId   String?  @unique
+  title       String
+  type        String?  // Album, Single, EP, etc.
+  firstReleaseDate String?
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  releases    Release[]
+  tags        ReleaseGroupTag[]
+
+  @@index([title])
+  @@index([mbid])
+}
+
+model Release {
+  id             String   @id @default(cuid())
+  mbid           String   @unique
+  title          String
+  status         String?  // Official, Bootleg, etc.
+  country        String?
+  date           String?
+  barcode        String?
+  releaseGroupId String?
+  labelName      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  releaseGroup   ReleaseGroup? @relation(fields: [releaseGroupId], references: [id])
+  tracks         ReleaseRecording[]
+
+  @@index([mbid])
+}
+
+model ReleaseRecording {
+  id          String    @id @default(cuid())
+  releaseId   String
+  recordingId String
+  position    Int
+  trackTitle  String?
+
+  release     Release   @relation(fields: [releaseId], references: [id])
+  recording   Recording @relation(fields: [recordingId], references: [id])
+
+  @@unique([releaseId, recordingId])
+}
+
+// === Relationship Entities ===
+
+model Credit {
+  id          String   @id @default(cuid())
+  artistId    String
+  recordingId String
+  role        String   // producer, performer, engineer, composer, lyricist, etc.
+  instrument  String?  // guitar, drums, etc. (if role is performer)
+  attributes  String?  // Additional context
+
+  artist      Artist    @relation(fields: [artistId], references: [id])
+  recording   Recording @relation(fields: [recordingId], references: [id])
+
+  @@unique([artistId, recordingId, role])
+  @@index([role])
+}
+
+model SampleRelation {
+  id              String    @id @default(cuid())
+  samplingTrackId String
+  sampledTrackId  String
+  description     String?   // What was sampled (drum break, vocal, etc.)
+
+  samplingTrack   Recording @relation("SamplingTrack", fields: [samplingTrackId], references: [id])
+  sampledTrack    Recording @relation("SampledTrack", fields: [sampledTrackId], references: [id])
+
+  @@unique([samplingTrackId, sampledTrackId])
+}
+
+// === Tags / Taxonomy ===
+
+model ArtistTag {
+  id       String @id @default(cuid())
+  artistId String
+  tag      String
+  count    Int    @default(1)
+
+  artist   Artist @relation(fields: [artistId], references: [id])
+
+  @@unique([artistId, tag])
+  @@index([tag])
+}
+
+model RecordingTag {
+  id          String    @id @default(cuid())
+  recordingId String
+  tag         String
+  count       Int       @default(1)
+
+  recording   Recording @relation(fields: [recordingId], references: [id])
+
+  @@unique([recordingId, tag])
+  @@index([tag])
+}
+
+model ReleaseGroupTag {
+  id             String       @id @default(cuid())
+  releaseGroupId String
+  tag            String
+  count          Int          @default(1)
+
+  releaseGroup   ReleaseGroup @relation(fields: [releaseGroupId], references: [id])
+
+  @@unique([releaseGroupId, tag])
+  @@index([tag])
+}
+
+model ArtistAlias {
+  id       String @id @default(cuid())
+  artistId String
+  name     String
+  locale   String?
+
+  artist   Artist @relation(fields: [artistId], references: [id])
+
+  @@index([name])
+}
+
+// === API Cache ===
+
+model ApiCache {
+  key       String   @id
+  data      Json
+  source    String   // "musicbrainz", "spotify", "genius"
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([source])
+  @@index([expiresAt])
+}
