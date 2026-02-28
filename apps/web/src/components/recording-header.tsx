@@ -20,7 +20,7 @@ export function RecordingHeader({ recording, connections }: RecordingHeaderProps
 
   return (
     <Card className="overflow-hidden">
-      <CardContent className="flex flex-col md:flex-row gap-6 p-6">
+      <CardContent className="flex flex-col md:flex-row gap-5 p-5">
         {recording.spotifyData?.album?.images?.[0] ? (
           <img
             src={recording.spotifyData.album.images[0].url}

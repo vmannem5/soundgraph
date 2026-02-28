@@ -243,7 +243,7 @@ export function KnowledgeGraph({ recording, connections }: KnowledgeGraphProps) 
   }
 
   return (
-    <div className="w-full h-[700px] rounded-xl border overflow-hidden" style={{ background: '#0a0a0f' }}>
+    <div className="w-full h-[450px] sm:h-[550px] md:h-[650px] rounded-xl border overflow-hidden" style={{ background: '#0a0a0f' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

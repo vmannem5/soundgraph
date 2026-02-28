@@ -23,12 +23,12 @@ export default async function Home({ searchParams }: HomeProps) {
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center px-4 py-16 gap-8">
-      <div className="text-center space-y-4">
-        <h1 className="text-6xl font-bold tracking-tight bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 bg-clip-text text-transparent">
+    <main className="min-h-screen flex flex-col items-center px-4 sm:px-6 pt-12 sm:pt-20 pb-12 gap-6">
+      <div className="text-center space-y-3">
+        <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 bg-clip-text text-transparent">
           SoundGraph
         </h1>
-        <p className="text-lg text-muted-foreground max-w-md mx-auto">
+        <p className="text-base sm:text-lg text-muted-foreground max-w-md mx-auto leading-relaxed">
           Discover music through connections. Explore the DNA of every song.
         </p>
       </div>

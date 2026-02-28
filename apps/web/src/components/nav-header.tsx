@@ -8,7 +8,7 @@ export function NavHeader() {
 
   return (
     <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-50">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
         <Link href="/" className="text-xl font-bold tracking-tight bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 bg-clip-text text-transparent hover:opacity-80 transition-opacity">
           SoundGraph
         </Link>

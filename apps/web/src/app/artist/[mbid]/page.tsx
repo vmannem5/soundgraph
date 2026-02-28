@@ -47,7 +47,7 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
   const spotifyGenres = artist.spotifyData?.genres || []
 
   return (
-    <main className="max-w-4xl mx-auto px-4 py-8 space-y-8">
+    <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-5">
       <Link
         href="/"
         className="text-sm text-muted-foreground hover:text-foreground transition-colors"

@@ -22,7 +22,7 @@ export function SearchResults({ results }: SearchResultsProps) {
     spotifyArtists.length > 0
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-8">
+    <div className="w-full max-w-4xl mx-auto space-y-6">
       {/* MusicBrainz Artists */}
       {results.artists.length > 0 && (
         <section>

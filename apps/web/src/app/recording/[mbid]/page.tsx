@@ -58,7 +58,7 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
     recording.spotifyData?.external_urls?.spotify?.match(/track\/([a-zA-Z0-9]+)/)?.[1]
 
   return (
-    <main className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+    <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5">
       <Link
         href="/"
         className="text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -87,21 +87,21 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
           )}
         </TabsList>
 
-        <TabsContent value="graph" className="mt-4">
+        <TabsContent value="graph" className="mt-3">
           <KnowledgeGraph recording={recording} connections={connections} />
         </TabsContent>
 
-        <TabsContent value="credits" className="mt-4">
+        <TabsContent value="credits" className="mt-3">
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-3">
               <CardTitle>Credits</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
+              <div className="divide-y">
                 {credits.map((credit) => (
                   <div
                     key={`${credit.targetId}-${credit.type}`}
-                    className="flex justify-between items-center py-2 border-b last:border-0"
+                    className="flex justify-between items-center py-3"
                   >
                     <Link
                       href={`/artist/${credit.targetId}`}
@@ -122,17 +122,17 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
           </Card>
         </TabsContent>
 
-        <TabsContent value="performers" className="mt-4">
+        <TabsContent value="performers" className="mt-3">
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-3">
               <CardTitle>Performers</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
+              <div className="divide-y">
                 {performers.map((perf) => (
                   <div
                     key={`${perf.targetId}-${perf.type}`}
-                    className="flex justify-between items-center py-2 border-b last:border-0"
+                    className="flex justify-between items-center py-3"
                   >
                     <Link
                       href={`/artist/${perf.targetId}`}
@@ -154,17 +154,17 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
         </TabsContent>
 
         {samples.length > 0 && (
-          <TabsContent value="samples" className="mt-4">
+          <TabsContent value="samples" className="mt-3">
             <Card>
-              <CardHeader>
+              <CardHeader className="pb-3">
                 <CardTitle>Samples</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
+                <div className="divide-y">
                   {samples.map((sample) => (
                     <div
                       key={sample.targetId}
-                      className="flex justify-between items-center py-2 border-b last:border-0"
+                      className="flex justify-between items-center py-3"
                     >
                       <Link
                         href={`/recording/${sample.targetId}`}
