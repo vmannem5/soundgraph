@@ -46,7 +46,7 @@ The app is **API-first**: it fetches from MusicBrainz/Spotify on demand and cach
 **Key files to understand the system:**
 - `apps/web/src/lib/data-service.ts` — main data layer (search, artist/recording fetch, connection graph extraction)
 - `apps/web/src/lib/musicbrainz.ts` — MusicBrainz REST client with 1 req/sec rate limiter
-- `apps/web/src/lib/spotify.ts` — Spotify client (DEFERRED — not yet created)
+- `apps/web/src/lib/spotify.ts` — Spotify Client Credentials client (search, track/artist/album lookup, ISRC search)
 - `packages/database/prisma/schema.prisma` — full graph schema
 - `packages/database/src/index.ts` — singleton PrismaClient export
 
@@ -81,6 +81,17 @@ The app is **API-first**: it fetches from MusicBrainz/Spotify on demand and cach
 Deprecated endpoints (do not use): `audio-features`, `audio-analysis`, `recommendations`, `related-artists`
 
 Still available: `search`, `tracks`, `artists`, `albums`, `top-tracks`
+
+## Deployment
+
+**Vercel project:** `soundgraph` (auto-deploys from `main` branch)
+**Production URL:** https://soundgraph.vercel.app
+**Vercel config:** `vercel.json` at repo root (monorepo build settings)
+
+**Adding env vars to Vercel:** Use `printf` (not `echo`) to avoid trailing newlines:
+```bash
+printf 'value' | vercel env add VAR_NAME production
+```
 
 ## Known issues
 
