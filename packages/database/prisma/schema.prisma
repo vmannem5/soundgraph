@@ -92,6 +92,7 @@ model Release {
   tracks         ReleaseRecording[]
 
   @@index([mbid])
+  @@index([releaseGroupId])
 }
 
 model ReleaseRecording {
@@ -105,6 +106,8 @@ model ReleaseRecording {
   recording   Recording @relation(fields: [recordingId], references: [id])
 
   @@unique([releaseId, recordingId])
+  @@index([releaseId])
+  @@index([recordingId])
 }
 
 // === Relationship Entities ===
@@ -122,6 +125,8 @@ model Credit {
 
   @@unique([artistId, recordingId, role])
   @@index([role])
+  @@index([artistId])
+  @@index([recordingId])
 }
 
 model SampleRelation {
@@ -134,6 +139,8 @@ model SampleRelation {
   sampledTrack    Recording @relation("SampledTrack", fields: [sampledTrackId], references: [id])
 
   @@unique([samplingTrackId, sampledTrackId])
+  @@index([samplingTrackId])
+  @@index([sampledTrackId])
 }
 
 // === Tags / Taxonomy ===
@@ -148,6 +155,7 @@ model ArtistTag {
 
   @@unique([artistId, tag])
   @@index([tag])
+  @@index([artistId])
 }
 
 model RecordingTag {
@@ -160,6 +168,7 @@ model RecordingTag {
 
   @@unique([recordingId, tag])
   @@index([tag])
+  @@index([recordingId])
 }
 
 model ReleaseGroupTag {
@@ -172,6 +181,7 @@ model ReleaseGroupTag {
 
   @@unique([releaseGroupId, tag])
   @@index([tag])
+  @@index([releaseGroupId])
 }
 
 model ArtistAlias {
@@ -183,6 +193,7 @@ model ArtistAlias {
   artist   Artist @relation(fields: [artistId], references: [id])
 
   @@index([name])
+  @@index([artistId])
 }
 
 // === API Cache ===
