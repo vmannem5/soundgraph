@@ -21,9 +21,17 @@ const eslintConfig = [
     ],
   },
   {
-    files: ["src/lib/musicbrainz.ts", "src/lib/data-service.ts", "src/components/search-results.tsx"],
+    files: [
+      "src/lib/musicbrainz.ts",
+      "src/lib/data-service.ts",
+      "src/components/search-results.tsx",
+      "src/components/recording-header.tsx",
+      "src/app/recording/*/page.tsx",
+      "src/app/artist/*/page.tsx",
+    ],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
+      "@next/next/no-img-element": "off",
     },
   },
 ];
