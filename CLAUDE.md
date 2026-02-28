@@ -12,8 +12,8 @@ pnpm dev              # Start Next.js dev server with Turbopack (http://localhos
 pnpm build            # Production build
 pnpm lint             # ESLint
 
-# Database (run from packages/database)
-pnpm --filter @soundgraph/database db:push      # Push schema changes to Supabase (no migration history)
+# Database
+pnpm --filter @soundgraph/database db:push      # Push schema changes (no migration history)
 pnpm --filter @soundgraph/database db:generate  # Regenerate Prisma client after schema changes
 pnpm --filter @soundgraph/database db:migrate   # Create a migration (use for prod-ready changes)
 pnpm --filter @soundgraph/database db:studio    # Open Prisma Studio GUI
@@ -30,6 +30,7 @@ pnpm --filter @soundgraph/database add <pkg>    # Add dep to database package
 ```
 apps/web/          — Next.js 15 App Router app (@soundgraph/web)
 packages/database/ — Prisma client + schema (@soundgraph/database)
+scripts/           — Hetzner setup, MusicBrainz import, seed scripts
 ```
 
 **Data flow:**
@@ -38,15 +39,15 @@ MusicBrainz API (1 req/sec, no key) ──┐
                                        ├─→ data-service.ts ──→ Next.js pages/routes
 Spotify Web API (Client Credentials) ──┘         │
                                                   ↓
-                                        ApiCache (Supabase, 1-week TTL)
+                                     PostgreSQL (Hetzner, 1-week cache TTL)
 ```
 
-The app is **API-first**: it fetches from MusicBrainz/Spotify on demand and caches results in the `ApiCache` Prisma model. No bulk data import. Phase 2 (separate plan) will add a full MusicBrainz dump.
+The data service queries Prisma DB first for cached/seeded data, then fetches from MusicBrainz/Spotify APIs, merges and deduplicates results.
 
-**Key files to understand the system:**
-- `apps/web/src/lib/data-service.ts` — main data layer (search, artist/recording fetch, connection graph extraction)
+**Key files:**
+- `apps/web/src/lib/data-service.ts` — main data layer (search, artist/recording fetch, connection graph)
 - `apps/web/src/lib/musicbrainz.ts` — MusicBrainz REST client with 1 req/sec rate limiter
-- `apps/web/src/lib/spotify.ts` — Spotify Client Credentials client (search, track/artist/album lookup, ISRC search)
+- `apps/web/src/lib/spotify.ts` — Spotify Client Credentials client (search, track/artist/album, ISRC)
 - `packages/database/prisma/schema.prisma` — full graph schema
 - `packages/database/src/index.ts` — singleton PrismaClient export
 
@@ -61,13 +62,40 @@ The app is **API-first**: it fetches from MusicBrainz/Spotify on demand and cach
 - Tailwind CSS v4 — uses `@import "tailwindcss"` syntax (not `@tailwind` directives)
 - shadcn/ui — New York style, Neutral palette, components in `apps/web/src/components/ui/`
 - `@xyflow/react` (React Flow v12) for the interactive knowledge graph/mind map
+- Dark/light theme via `ThemeProvider` (persists to localStorage)
 - Path alias `@/*` → `apps/web/src/*`
 
 **Environment variables** (never commit these):
-- `packages/database/.env` — `DATABASE_URL` for Prisma CLI commands
-- `apps/web/.env.local` — `DATABASE_URL`, `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`
+- `packages/database/.env` — `DATABASE_URL`, `DIRECT_URL`
+- `apps/web/.env.local` — `DATABASE_URL`, `DIRECT_URL`, `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`
 
 **Prisma version:** 5.22.0 (pinned — Prisma 7 has breaking changes incompatible with this schema)
+
+## Deployment
+
+**Hosting:** Hetzner VPS (178.156.244.124), Ubuntu 24.04
+**Production URL:** http://178.156.244.124:3000
+**Server stack:** Node.js 20 LTS + PM2 + PostgreSQL 16
+
+**Deploy process:**
+```bash
+ssh root@178.156.244.124
+cd /opt/soundgraph
+git pull origin main
+pnpm install
+pnpm build
+pm2 restart soundgraph
+```
+
+**Server paths:**
+- App: `/opt/soundgraph`
+- Env files: `/opt/soundgraph/apps/web/.env.local`, `/opt/soundgraph/packages/database/.env`
+- PM2 logs: `pm2 logs soundgraph`
+
+**Infrastructure scripts:**
+- `scripts/setup-hetzner.sh` — Initial server setup (PostgreSQL, firewall, user)
+- `scripts/import-musicbrainz.sh` — Full MB data dump import pipeline
+- `scripts/seed-artists.ts` — Seed specific artists from MB API
 
 ## MusicBrainz API notes
 
@@ -76,25 +104,14 @@ The app is **API-first**: it fetches from MusicBrainz/Spotify on demand and cach
 - No API key required
 - ISRC codes are the primary cross-reference key to link MB recordings → Spotify tracks
 
-## Spotify API notes (as of 2024)
+## Spotify API notes
 
 Deprecated endpoints (do not use): `audio-features`, `audio-analysis`, `recommendations`, `related-artists`
 
 Still available: `search`, `tracks`, `artists`, `albums`, `top-tracks`
 
-## Deployment
-
-**Vercel project:** `soundgraph` (auto-deploys from `main` branch)
-**Production URL:** https://soundgraph.vercel.app
-**Vercel config:** `vercel.json` at repo root (monorepo build settings)
-
-**Adding env vars to Vercel:** Use `printf` (not `echo`) to avoid trailing newlines:
-```bash
-printf 'value' | vercel env add VAR_NAME production
-```
-
 ## Known issues
 
-**Node.js v25 TLS incompatibility with MusicBrainz:** Node.js v25 (OpenSSL 3.6.0) TLS connections are rejected by MusicBrainz servers. `musicbrainz.ts` works around this by using `curl` via `execFileSync` locally and falling back to native `fetch` on Vercel/production (Node.js 20 LTS). If upgrading to Node.js 20 or 22 LTS, the curl workaround is unnecessary.
+**Node.js v25 TLS incompatibility with MusicBrainz:** Local dev (Node.js v25) uses `curl` via `execFileSync` as a workaround. Production (Node.js 20 on Hetzner) uses native `fetch` directly — no workaround needed.
 
 **Prisma CLI version:** Always use `npx prisma` (local v5.22.0), never `pnpm dlx prisma` (pulls latest v7 which has breaking changes).

@@ -23,15 +23,15 @@ PG_HBA="/etc/postgresql/16/main/pg_hba.conf"
 # Listen on all interfaces
 sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" "$PG_CONF"
 
-# Performance tuning for 4GB RAM server
+# Performance tuning for 2GB RAM server
 cat >> "$PG_CONF" <<'PGCONF'
 
-# SoundGraph performance tuning
-shared_buffers = 1GB
-effective_cache_size = 3GB
-maintenance_work_mem = 256MB
-work_mem = 16MB
-max_connections = 100
+# SoundGraph performance tuning (2GB RAM)
+shared_buffers = 512MB
+effective_cache_size = 1GB
+maintenance_work_mem = 128MB
+work_mem = 8MB
+max_connections = 50
 random_page_cost = 1.1
 effective_io_concurrency = 200
 PGCONF
