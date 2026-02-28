@@ -1,6 +1,7 @@
 import { prisma } from '@soundgraph/database'
 import type { Prisma } from '@soundgraph/database'
 import * as mb from './musicbrainz'
+import * as spotify from './spotify'
 
 const CACHE_TTL_HOURS = 24 * 7 // 1 week cache
 
@@ -39,16 +40,17 @@ async function setCache(key: string, data: Prisma.InputJsonValue, source: string
 // === Public API ===
 
 export async function searchAll(query: string) {
-  // Search MusicBrainz (Spotify search deferred — will be added as parallel Promise.all call)
-  const [mbArtists, mbRecordings] = await Promise.all([
+  const [mbArtists, mbRecordings, spotifyResults] = await Promise.all([
     mb.searchArtists(query, 5),
     mb.searchRecordings(query, 5),
+    spotify.searchSpotify(query, 'track,artist', 5).catch(() => null),
   ])
 
   return {
-    artists: (mbArtists.artists || []) as any[],
-    recordings: (mbRecordings.recordings || []) as any[],
-    // TODO: Add spotifyTracks and spotifyArtists when Spotify client is ready
+    artists: mbArtists.artists as any[] || [],
+    recordings: mbRecordings.recordings as any[] || [],
+    spotifyTracks: spotifyResults?.tracks?.items || [],
+    spotifyArtists: spotifyResults?.artists?.items || [],
   }
 }
 
@@ -59,10 +61,19 @@ export async function getArtistDetails(mbid: string) {
 
   const artist = await mb.getArtist(mbid)
 
-  // TODO: Spotify enrichment — look for Spotify URL in artist.relations,
-  // extract Spotify artist ID, fetch images/popularity via spotify.getSpotifyArtist()
-  // For now, spotifyData is null
-  const result = { ...artist, spotifyData: null }
+  // Try to find Spotify data via URL relations
+  const spotifyUrl = artist.relations?.find(
+    (r: any) => (r.type === 'streaming' || r.type === 'free streaming') && r.url?.resource?.includes('spotify.com')
+  )
+  let spotifyData = null
+  if (spotifyUrl) {
+    const spotifyId = spotifyUrl.url.resource.match(/artist\/([a-zA-Z0-9]+)/)?.[1]
+    if (spotifyId) {
+      spotifyData = await spotify.getSpotifyArtist(spotifyId).catch(() => null)
+    }
+  }
+
+  const result = { ...artist, spotifyData }
   await setCache(key, result as Prisma.InputJsonValue, 'musicbrainz')
   return result
 }
@@ -74,10 +85,17 @@ export async function getRecordingDetails(mbid: string) {
 
   const recording = await mb.getRecording(mbid)
 
-  // TODO: Spotify enrichment — use recording.isrcs[0] to search Spotify via searchByIsrc()
-  // to get album art, preview URL, popularity
-  // For now, spotifyData is null
-  const result = { ...recording, spotifyData: null }
+  // Try to enrich with Spotify data via ISRC
+  let spotifyData = null
+  if (recording.isrcs?.length > 0) {
+    const isrc = recording.isrcs[0]
+    const results = await spotify.searchByIsrc(isrc).catch(() => null)
+    if (results?.tracks?.items?.length > 0) {
+      spotifyData = results.tracks.items[0]
+    }
+  }
+
+  const result = { ...recording, spotifyData }
   await setCache(key, result as Prisma.InputJsonValue, 'musicbrainz')
   return result
 }

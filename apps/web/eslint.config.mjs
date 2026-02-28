@@ -23,6 +23,7 @@ const eslintConfig = [
   {
     files: [
       "src/lib/musicbrainz.ts",
+      "src/lib/spotify.ts",
       "src/lib/data-service.ts",
       "src/components/search-results.tsx",
       "src/components/recording-header.tsx",
