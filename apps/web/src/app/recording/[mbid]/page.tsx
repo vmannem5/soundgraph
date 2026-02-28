@@ -22,14 +22,25 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
     recording = data.recording
     connections = data.connections
   } catch {
-    return (
-      <main className="max-w-6xl mx-auto px-4 py-8 space-y-4">
-        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-          &larr; Back to search
-        </Link>
-        <p className="text-muted-foreground">Failed to load recording. Please try again.</p>
-      </main>
-    )
+    // Retry once after delay (MusicBrainz rate limit is 1 req/sec)
+    try {
+      await new Promise(r => setTimeout(r, 1500))
+      const data = await getRecordingConnections(mbid)
+      recording = data.recording
+      connections = data.connections
+    } catch {
+      return (
+        <main className="max-w-6xl mx-auto px-4 py-8 space-y-4">
+          <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
+            &larr; Back to search
+          </Link>
+          <p className="text-muted-foreground">
+            Failed to load recording — MusicBrainz may be rate-limiting requests.{' '}
+            <a href={`/recording/${mbid}`} className="underline hover:text-foreground">Try again</a>
+          </p>
+        </main>
+      )
+    }
   }
 
   const credits = connections.filter(

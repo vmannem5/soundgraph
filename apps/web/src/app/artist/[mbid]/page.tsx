@@ -21,14 +21,26 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
       mb.getArtistReleaseGroups(mbid, 25),
     ])
   } catch {
-    return (
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-4">
-        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-          &larr; Back to search
-        </Link>
-        <p className="text-muted-foreground">Failed to load artist. Please try again.</p>
-      </main>
-    )
+    // Retry once after delay (MusicBrainz rate limit is 1 req/sec)
+    try {
+      await new Promise(r => setTimeout(r, 1500))
+        ;[artist, releaseGroups] = await Promise.all([
+          getArtistDetails(mbid),
+          mb.getArtistReleaseGroups(mbid, 25),
+        ])
+    } catch {
+      return (
+        <main className="max-w-4xl mx-auto px-4 py-8 space-y-4">
+          <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
+            &larr; Back to search
+          </Link>
+          <p className="text-muted-foreground">
+            Failed to load artist — MusicBrainz may be rate-limiting requests.{' '}
+            <a href={`/artist/${mbid}`} className="underline hover:text-foreground">Try again</a>
+          </p>
+        </main>
+      )
+    }
   }
 
   const tags = artist.tags?.slice(0, 10) || []
