@@ -3,10 +3,40 @@ import { mbRateLimiter } from './rate-limiter'
 const MB_BASE = 'https://musicbrainz.org/ws/2'
 const USER_AGENT = 'SoundGraph/0.1.0 (soundgraph-app@example.com)'
 
+// Detect if we're running on Vercel (serverless) vs local dev
+const IS_VERCEL = !!process.env.VERCEL
+
 interface MBSearchResult<T> {
   count: number
   offset: number
   [key: string]: T[] | number
+}
+
+async function mbFetchWithCurl<T>(url: URL): Promise<T> {
+  const { execFileSync } = await import('node:child_process')
+  const result = execFileSync('curl', [
+    '-4', '-s', '--max-time', '10',
+    '-H', `User-Agent: ${USER_AGENT}`,
+    url.toString(),
+  ], { encoding: 'utf-8', timeout: 15000 })
+
+  const data = JSON.parse(result)
+  if (data.error) {
+    throw new Error(`MusicBrainz API error: ${data.error}`)
+  }
+  return data as T
+}
+
+async function mbFetchWithFetch<T>(url: URL): Promise<T> {
+  const res = await fetch(url.toString(), {
+    headers: { 'User-Agent': USER_AGENT },
+  })
+
+  if (!res.ok) {
+    throw new Error(`MusicBrainz API error: ${res.status} ${res.statusText}`)
+  }
+
+  return res.json()
 }
 
 async function mbFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
@@ -18,15 +48,18 @@ async function mbFetch<T>(path: string, params?: Record<string, string>): Promis
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
   }
 
-  const res = await fetch(url.toString(), {
-    headers: { 'User-Agent': USER_AGENT },
-  })
-
-  if (!res.ok) {
-    throw new Error(`MusicBrainz API error: ${res.status} ${res.statusText}`)
+  // On Vercel (Node.js 20), use native fetch directly — no TLS issues.
+  // Locally (Node.js v25), use curl workaround for TLS incompatibility with MusicBrainz.
+  if (IS_VERCEL) {
+    return mbFetchWithFetch<T>(url)
   }
 
-  return res.json()
+  try {
+    return await mbFetchWithCurl<T>(url)
+  } catch {
+    // Fallback to native fetch if curl is not available
+    return mbFetchWithFetch<T>(url)
+  }
 }
 
 export async function searchArtists(query: string, limit = 10) {

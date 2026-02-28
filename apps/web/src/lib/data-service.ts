@@ -9,20 +9,31 @@ function cacheKey(source: string, type: string, id: string) {
 }
 
 async function getCached<T>(key: string): Promise<T | null> {
-  const cached = await prisma.apiCache.findUnique({ where: { key } })
-  if (cached && cached.expiresAt > new Date()) {
-    return cached.data as T
+  try {
+    const cached = await prisma.apiCache.findUnique({ where: { key } })
+    if (cached && cached.expiresAt > new Date()) {
+      return cached.data as T
+    }
+  } catch (error) {
+    // Database unreachable (e.g., Vercel serverless can't reach Supabase direct connection)
+    // Gracefully skip cache and fall through to API fetch
+    console.warn('Cache read failed (DB unreachable), skipping:', (error as Error).message?.slice(0, 100))
   }
   return null
 }
 
 async function setCache(key: string, data: Prisma.InputJsonValue, source: string) {
-  const expiresAt = new Date(Date.now() + CACHE_TTL_HOURS * 60 * 60 * 1000)
-  await prisma.apiCache.upsert({
-    where: { key },
-    update: { data, expiresAt },
-    create: { key, data, source, expiresAt },
-  })
+  try {
+    const expiresAt = new Date(Date.now() + CACHE_TTL_HOURS * 60 * 60 * 1000)
+    await prisma.apiCache.upsert({
+      where: { key },
+      update: { data, expiresAt },
+      create: { key, data, source, expiresAt },
+    })
+  } catch (error) {
+    // Database unreachable — skip caching, data will be fetched fresh next time
+    console.warn('Cache write failed (DB unreachable), skipping:', (error as Error).message?.slice(0, 100))
+  }
 }
 
 // === Public API ===
