@@ -15,10 +15,8 @@ async function getCached<T>(key: string): Promise<T | null> {
     if (cached && cached.expiresAt > new Date()) {
       return cached.data as T
     }
-  } catch (error) {
-    // Database unreachable (e.g., Vercel serverless can't reach Supabase direct connection)
-    // Gracefully skip cache and fall through to API fetch
-    console.warn('Cache read failed (DB unreachable), skipping:', (error as Error).message?.slice(0, 100))
+  } catch {
+    // Database unreachable — skip cache
   }
   return null
 }
@@ -31,33 +29,102 @@ async function setCache(key: string, data: Prisma.InputJsonValue, source: string
       update: { data, expiresAt },
       create: { key, data, source, expiresAt },
     })
-  } catch (error) {
-    // Database unreachable — skip caching, data will be fetched fresh next time
-    console.warn('Cache write failed (DB unreachable), skipping:', (error as Error).message?.slice(0, 100))
+  } catch {
+    // Database unreachable — skip caching
   }
 }
 
 // === Public API ===
 
 export async function searchAll(query: string) {
+  // Try DB search first
+  const [dbArtists, dbRecordings] = await Promise.all([
+    prisma.artist.findMany({
+      where: { name: { contains: query, mode: 'insensitive' } },
+      take: 5,
+      include: { tags: { take: 5 } },
+    }).catch(() => []),
+    prisma.recording.findMany({
+      where: { title: { contains: query, mode: 'insensitive' } },
+      take: 5,
+      include: {
+        credits: { include: { artist: true }, where: { role: 'performer' }, take: 3 },
+        tags: { take: 5 },
+      },
+    }).catch(() => []),
+  ])
+
+  // Also fetch from APIs for broader results
   const [mbArtists, mbRecordings, spotifyResults] = await Promise.all([
     mb.searchArtists(query, 5).catch(() => null),
     mb.searchRecordings(query, 5).catch(() => null),
     spotify.searchSpotify(query, 'track,artist', 5).catch(() => null),
   ])
 
+  // Merge DB artists into MB format for compatibility
+  const dbArtistsMapped = dbArtists.map(a => ({
+    id: a.mbid,
+    name: a.name,
+    type: a.type,
+    country: a.country,
+    disambiguation: a.disambiguation,
+    _fromDb: true,
+  }))
+
+  // Merge DB recordings into MB format
+  const dbRecordingsMapped = dbRecordings.map(r => ({
+    id: r.mbid,
+    title: r.title,
+    length: r.length,
+    'artist-credit': r.credits.map(c => ({ name: c.artist.name, artist: { id: c.artist.mbid, name: c.artist.name } })),
+    _fromDb: true,
+  }))
+
+  // Deduplicate: prefer DB results, add API results that aren't in DB
+  const mbArtistsList = (mbArtists?.artists as any[]) || []
+  const mbRecordingsList = (mbRecordings?.recordings as any[]) || []
+
+  const dbArtistMbids = new Set(dbArtists.map(a => a.mbid))
+  const dbRecordingMbids = new Set(dbRecordings.map(r => r.mbid))
+
+  const mergedArtists = [
+    ...dbArtistsMapped,
+    ...mbArtistsList.filter((a: any) => !dbArtistMbids.has(a.id)),
+  ].slice(0, 10)
+
+  const mergedRecordings = [
+    ...dbRecordingsMapped,
+    ...mbRecordingsList.filter((r: any) => !dbRecordingMbids.has(r.id)),
+  ].slice(0, 10)
+
   return {
-    artists: (mbArtists?.artists as any[]) || [],
-    recordings: (mbRecordings?.recordings as any[]) || [],
+    artists: mergedArtists,
+    recordings: mergedRecordings,
     spotifyTracks: spotifyResults?.tracks?.items || [],
     spotifyArtists: spotifyResults?.artists?.items || [],
   }
 }
 
 export async function getArtistDetails(mbid: string) {
+  // Try DB first
+  const dbArtist = await prisma.artist.findUnique({
+    where: { mbid },
+    include: {
+      tags: { orderBy: { count: 'desc' }, take: 15 },
+      aliases: { take: 10 },
+    },
+  }).catch(() => null)
+
+  // Always fetch from MB API for full details (has relations, life-span, etc.)
   const key = cacheKey('mb', 'artist', mbid)
   const cached = await getCached<Record<string, unknown>>(key)
-  if (cached) return cached
+  if (cached) {
+    // Enrich cached data with DB data
+    if (dbArtist) {
+      (cached as any).tags = (cached as any).tags || dbArtist.tags.map(t => ({ name: t.tag, count: t.count }))
+    }
+    return cached
+  }
 
   const artist = await mb.getArtist(mbid)
 
@@ -73,7 +140,12 @@ export async function getArtistDetails(mbid: string) {
     }
   }
 
-  const result = { ...artist, spotifyData }
+  // Merge DB tags if MB tags are sparse
+  const result: any = { ...artist, spotifyData }
+  if (dbArtist && (!result.tags || result.tags.length === 0)) {
+    result.tags = dbArtist.tags.map(t => ({ name: t.tag, count: t.count }))
+  }
+
   await setCache(key, result as Prisma.InputJsonValue, 'musicbrainz')
   return result
 }
@@ -103,7 +175,6 @@ export async function getRecordingDetails(mbid: string) {
 export async function getRecordingConnections(mbid: string) {
   const recording = await getRecordingDetails(mbid)
 
-  // Extract connections from MusicBrainz relations
   const connections: {
     type: string
     label: string
@@ -113,43 +184,104 @@ export async function getRecordingConnections(mbid: string) {
     attributes?: string[]
   }[] = []
 
-  // Artist credits (performers)
+  // === DB connections (from Prisma — includes samples, credits) ===
+  const dbRecording = await prisma.recording.findUnique({
+    where: { mbid },
+    include: {
+      credits: { include: { artist: true } },
+      samplesUsed: { include: { sampledTrack: { include: { credits: { include: { artist: true }, where: { role: 'performer' }, take: 1 } } } } },
+      sampledBy: { include: { samplingTrack: { include: { credits: { include: { artist: true }, where: { role: 'performer' }, take: 1 } } } } },
+      tags: { orderBy: { count: 'desc' }, take: 10 },
+    },
+  }).catch(() => null)
+
+  if (dbRecording) {
+    // Credits from DB
+    for (const credit of dbRecording.credits) {
+      connections.push({
+        type: credit.role,
+        label: credit.role,
+        targetType: 'artist',
+        targetId: credit.artist.mbid,
+        targetName: credit.artist.name,
+        attributes: credit.instrument ? [credit.instrument] : undefined,
+      })
+    }
+
+    // Samples used (this track samples other tracks)
+    for (const sample of dbRecording.samplesUsed) {
+      const artistName = sample.sampledTrack.credits[0]?.artist.name || ''
+      connections.push({
+        type: 'samples material',
+        label: 'samples',
+        targetType: 'recording',
+        targetId: sample.sampledTrack.mbid,
+        targetName: `${sample.sampledTrack.title}${artistName ? ` (${artistName})` : ''}`,
+      })
+    }
+
+    // Sampled by (other tracks sample this track)
+    for (const sample of dbRecording.sampledBy) {
+      const artistName = sample.samplingTrack.credits[0]?.artist.name || ''
+      connections.push({
+        type: 'sampled by',
+        label: 'sampled by',
+        targetType: 'recording',
+        targetId: sample.samplingTrack.mbid,
+        targetName: `${sample.samplingTrack.title}${artistName ? ` (${artistName})` : ''}`,
+      })
+    }
+  }
+
+  // === API connections (from MusicBrainz relations) ===
+  const dbConnectionIds = new Set(connections.map(c => `${c.targetId}-${c.type}`))
+
+  // Artist credits (performers) from MB
   const artistCredits = recording['artist-credit'] as Array<Record<string, unknown>> | undefined
   artistCredits?.forEach((credit) => {
     const artist = credit.artist as Record<string, unknown>
-    connections.push({
-      type: 'performer',
-      label: credit.joinphrase ? `performer${credit.joinphrase}` : 'performer',
-      targetType: 'artist',
-      targetId: artist.id as string,
-      targetName: artist.name as string,
-    })
+    const key = `${artist.id}-performer`
+    if (!dbConnectionIds.has(key)) {
+      connections.push({
+        type: 'performer',
+        label: credit.joinphrase ? `performer${credit.joinphrase}` : 'performer',
+        targetType: 'artist',
+        targetId: artist.id as string,
+        targetName: artist.name as string,
+      })
+    }
   })
 
-  // Relations (producers, engineers, samples, etc.)
+  // Relations (producers, engineers, samples, etc.) from MB
   const relations = recording.relations as Array<Record<string, unknown>> | undefined
   relations?.forEach((rel) => {
     if (rel['target-type'] === 'artist') {
       const artist = rel.artist as Record<string, unknown>
-      connections.push({
-        type: rel.type as string,
-        label: rel.type as string,
-        targetType: 'artist',
-        targetId: artist.id as string,
-        targetName: artist.name as string,
-        attributes: rel.attributes as string[] | undefined,
-      })
+      const key = `${artist.id}-${rel.type}`
+      if (!dbConnectionIds.has(key)) {
+        connections.push({
+          type: rel.type as string,
+          label: rel.type as string,
+          targetType: 'artist',
+          targetId: artist.id as string,
+          targetName: artist.name as string,
+          attributes: rel.attributes as string[] | undefined,
+        })
+      }
     }
     if (rel['target-type'] === 'recording') {
       const rec = rel.recording as Record<string, unknown>
-      connections.push({
-        type: rel.type as string,
-        label: rel.type as string,
-        targetType: 'recording',
-        targetId: rec.id as string,
-        targetName: rec.title as string,
-        attributes: rel.attributes as string[] | undefined,
-      })
+      const key = `${rec.id}-${rel.type}`
+      if (!dbConnectionIds.has(key)) {
+        connections.push({
+          type: rel.type as string,
+          label: rel.type as string,
+          targetType: 'recording',
+          targetId: rec.id as string,
+          targetName: rec.title as string,
+          attributes: rel.attributes as string[] | undefined,
+        })
+      }
     }
     if (rel['target-type'] === 'work') {
       const work = rel.work as Record<string, unknown>
