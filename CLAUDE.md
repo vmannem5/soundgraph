@@ -46,7 +46,7 @@ The app is **API-first**: it fetches from MusicBrainz/Spotify on demand and cach
 **Key files to understand the system:**
 - `apps/web/src/lib/data-service.ts` — main data layer (search, artist/recording fetch, connection graph extraction)
 - `apps/web/src/lib/musicbrainz.ts` — MusicBrainz REST client with 1 req/sec rate limiter
-- `apps/web/src/lib/spotify.ts` — Spotify client (Client Credentials, token auto-refresh)
+- `apps/web/src/lib/spotify.ts` — Spotify client (DEFERRED — not yet created)
 - `packages/database/prisma/schema.prisma` — full graph schema
 - `packages/database/src/index.ts` — singleton PrismaClient export
 
@@ -81,3 +81,9 @@ The app is **API-first**: it fetches from MusicBrainz/Spotify on demand and cach
 Deprecated endpoints (do not use): `audio-features`, `audio-analysis`, `recommendations`, `related-artists`
 
 Still available: `search`, `tracks`, `artists`, `albums`, `top-tracks`
+
+## Known issues
+
+**Node.js v25 TLS incompatibility with MusicBrainz:** Node.js v25 (OpenSSL 3.6.0) TLS connections are rejected by MusicBrainz servers. `musicbrainz.ts` works around this by using `curl` via `execFileSync` locally and falling back to native `fetch` on Vercel/production (Node.js 20 LTS). If upgrading to Node.js 20 or 22 LTS, the curl workaround is unnecessary.
+
+**Prisma CLI version:** Always use `npx prisma` (local v5.22.0), never `pnpm dlx prisma` (pulls latest v7 which has breaking changes).
