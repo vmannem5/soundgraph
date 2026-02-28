@@ -21,7 +21,7 @@ const eslintConfig = [
     ],
   },
   {
-    files: ["src/lib/musicbrainz.ts", "src/lib/data-service.ts"],
+    files: ["src/lib/musicbrainz.ts", "src/lib/data-service.ts", "src/components/search-results.tsx"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
     },

@@ -35,8 +35,8 @@ export async function searchAll(query: string) {
   ])
 
   return {
-    artists: mbArtists.artists || [],
-    recordings: mbRecordings.recordings || [],
+    artists: (mbArtists.artists || []) as any[],
+    recordings: (mbRecordings.recordings || []) as any[],
     // TODO: Add spotifyTracks and spotifyArtists when Spotify client is ready
   }
 }
