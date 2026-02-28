@@ -41,14 +41,14 @@ async function setCache(key: string, data: Prisma.InputJsonValue, source: string
 
 export async function searchAll(query: string) {
   const [mbArtists, mbRecordings, spotifyResults] = await Promise.all([
-    mb.searchArtists(query, 5),
-    mb.searchRecordings(query, 5),
+    mb.searchArtists(query, 5).catch(() => null),
+    mb.searchRecordings(query, 5).catch(() => null),
     spotify.searchSpotify(query, 'track,artist', 5).catch(() => null),
   ])
 
   return {
-    artists: mbArtists.artists as any[] || [],
-    recordings: mbRecordings.recordings as any[] || [],
+    artists: (mbArtists?.artists as any[]) || [],
+    recordings: (mbRecordings?.recordings as any[]) || [],
     spotifyTracks: spotifyResults?.tracks?.items || [],
     spotifyArtists: spotifyResults?.artists?.items || [],
   }

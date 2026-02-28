@@ -9,7 +9,16 @@ interface HomeProps {
 
 export default async function Home({ searchParams }: HomeProps) {
   const { q } = await searchParams
-  const results = q ? await searchAll(q) : null
+  let results = null
+  let searchError = false
+
+  if (q) {
+    try {
+      results = await searchAll(q)
+    } catch {
+      searchError = true
+    }
+  }
 
   return (
     <main className="min-h-screen flex flex-col items-center px-4 py-16 gap-8">
@@ -24,6 +33,11 @@ export default async function Home({ searchParams }: HomeProps) {
         <SearchBar />
       </Suspense>
 
+      {searchError && (
+        <p className="text-center text-muted-foreground py-12">
+          Search is temporarily unavailable. Please try again.
+        </p>
+      )}
       {results && <SearchResults results={results} />}
     </main>
   )
