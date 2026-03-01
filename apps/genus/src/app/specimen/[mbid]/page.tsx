@@ -152,7 +152,7 @@ export default async function SpecimenPage({ params }: Props) {
               target="_blank"
               rel="noopener noreferrer"
             >
-              View on SoundGraph →
+              View on MusicGenus →
             </Link>
           </div>
         </aside>

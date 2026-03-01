@@ -27,7 +27,7 @@ export default async function Home({ searchParams }: HomeProps) {
       <section className="flex flex-col items-center px-4 sm:px-6 pt-12 sm:pt-20 pb-8 gap-6">
         <div className={`text-center space-y-3 transition-all duration-300 ${hasResults ? 'scale-90 opacity-80' : ''}`}>
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight bg-gradient-to-r from-amber-400 via-orange-400 to-blue-400 bg-clip-text text-transparent">
-            SoundGraph
+            MusicGenus
           </h1>
           {!hasResults && (
             <p className="text-base sm:text-lg text-muted-foreground max-w-md mx-auto leading-relaxed">

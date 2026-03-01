@@ -15,7 +15,7 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "SoundGraph",
+  title: "MusicGenus",
   description: "Discover music through connections. Explore the DNA of every song.",
 };
 
@@ -31,7 +31,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{
           __html: `
             (function() {
-              var theme = localStorage.getItem('soundgraph-theme') || 'dark';
+              var theme = localStorage.getItem('musicgenus-theme') || 'dark';
               if (theme === 'dark') document.documentElement.classList.add('dark');
             })();
           `

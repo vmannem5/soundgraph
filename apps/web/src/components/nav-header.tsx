@@ -10,7 +10,7 @@ export function NavHeader() {
     <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
         <Link href="/" className="text-xl font-bold tracking-tight bg-gradient-to-r from-amber-400 via-orange-400 to-blue-400 bg-clip-text text-transparent hover:opacity-80 transition-opacity">
-          SoundGraph
+          MusicGenus
         </Link>
         <nav className="flex gap-4 items-center text-sm text-muted-foreground">
           <button

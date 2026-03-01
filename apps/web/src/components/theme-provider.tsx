@@ -20,7 +20,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         setMounted(true)
-        const stored = localStorage.getItem('soundgraph-theme') as Theme | null
+        const stored = localStorage.getItem('musicgenus-theme') as Theme | null
         if (stored) {
             setTheme(stored)
         } else {
@@ -37,7 +37,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         } else {
             root.classList.remove('dark')
         }
-        localStorage.setItem('soundgraph-theme', theme)
+        localStorage.setItem('musicgenus-theme', theme)
     }, [theme, mounted])
 
     const toggleTheme = () => {
