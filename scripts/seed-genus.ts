@@ -89,11 +89,12 @@ async function main() {
     const taxonomyId = familyMap.get(fam.slug)!
 
     // Find all artist mbids that have at least one matching tag
+    const normalizedTags = fam.tags.map(t => t.toLowerCase())
     const artists = await prisma.$queryRaw<Array<{ mbid: string }>>`
       SELECT DISTINCT a.mbid
       FROM "Artist" a
       JOIN "ArtistTag" at ON at."artistId" = a.id
-      WHERE LOWER(at.tag) = ANY(${fam.tags})
+      WHERE LOWER(at.tag) = ANY(${normalizedTags})
       LIMIT 500 -- MVP: seed top 500 artists per family; re-run to reclassify
     `
 
@@ -146,6 +147,26 @@ async function main() {
 
   console.log(`  Computing profiles for ${classifiedArtists.length} artists...`)
 
+  // Global maxima for normalization across all classified artists.
+  // Hardcoded reasonable upper bounds based on dataset characteristics:
+  //   genreBreadth:  most artists have <50 distinct tags
+  //   sampleUse:     most artists have <20 outgoing samples
+  //   collabRadius:  top artists have up to 200 unique co-credits
+  //   eraSpread:     career spans rarely exceed 50 years
+  //   instrDiversity: distinct instruments rarely exceed 20
+  //   geoReach:      distinct release countries rarely exceed 30
+  // (A nested-aggregate SQL query cannot be used because PostgreSQL forbids
+  //  nesting aggregate calls like MAX(COUNT(...)) without a subquery layer.)
+  const globalMax = {
+    genreBreadth:   50,
+    sampleUse:      20,
+    collabRadius:   200,
+    eraSpread:      50,
+    instrDiversity: 20,
+    geoReach:       30,
+  }
+  console.log('  Global maxima:', globalMax)
+
   // Compute in batches of 100 to avoid memory issues
   const BATCH = 100
   for (let i = 0; i < classifiedArtists.length; i += BATCH) {
@@ -168,8 +189,8 @@ async function main() {
         COUNT(DISTINCT sr.id)                          AS sample_use,
         COUNT(DISTINCT c."artistId")                   AS collab_radius,
         COALESCE(
-          MAX(EXTRACT(YEAR FROM rg."firstReleaseDate"::date)) -
-          MIN(EXTRACT(YEAR FROM rg."firstReleaseDate"::date)),
+          MAX(SUBSTRING(rg."firstReleaseDate", 1, 4)::int) -
+          MIN(SUBSTRING(rg."firstReleaseDate", 1, 4)::int),
           0
         )                                              AS era_spread,
         COUNT(DISTINCT c.instrument)                   AS instrument_diversity,
@@ -185,45 +206,35 @@ async function main() {
       LEFT JOIN "ReleaseGroup" rg ON rg.id = rel."releaseGroupId"
         AND rg."firstReleaseDate" IS NOT NULL
         AND rg."firstReleaseDate" != ''
+        AND LENGTH(rg."firstReleaseDate") >= 4
       WHERE a.mbid = ANY(${mbids})
       GROUP BY a.mbid
     `
 
-    // Normalize each axis to 0-100 within this batch
-    const toNum = (v: bigint | number | null) => Number(v ?? 0)
-    const normalize = (arr: number[]) => {
-      const max = Math.max(...arr, 1)
-      return arr.map(v => Math.min(100, (v / max) * 100))
-    }
-
-    const genreBreadths = normalize(profiles.map(p => toNum(p.genre_breadth)))
-    const sampleUses = normalize(profiles.map(p => toNum(p.sample_use)))
-    const collabRadii = normalize(profiles.map(p => toNum(p.collab_radius)))
-    const eraSpreads = normalize(profiles.map(p => toNum(p.era_spread)))
-    const instrDiversities = normalize(profiles.map(p => toNum(p.instrument_diversity)))
-    const geoReaches = normalize(profiles.map(p => toNum(p.geo_reach)))
-
     for (let j = 0; j < profiles.length; j++) {
       const p = profiles[j]
+      const toN = (v: bigint | number | null, max: number) =>
+        Math.min(100, (Number(v ?? 0) / max) * 100)
+
       await prisma.soundProfile.upsert({
         where: { entityMbid: p.mbid },
         create: {
           entityType: 'artist',
           entityMbid: p.mbid,
-          genreBreadth: genreBreadths[j],
-          sampleUse: sampleUses[j],
-          collaborationRadius: collabRadii[j],
-          eraSpread: eraSpreads[j],
-          instrumentDiversity: instrDiversities[j],
-          geographicReach: geoReaches[j],
+          genreBreadth:        toN(p.genre_breadth, globalMax.genreBreadth),
+          sampleUse:           toN(p.sample_use, globalMax.sampleUse),
+          collaborationRadius: toN(p.collab_radius, globalMax.collabRadius),
+          eraSpread:           toN(p.era_spread, globalMax.eraSpread),
+          instrumentDiversity: toN(p.instrument_diversity, globalMax.instrDiversity),
+          geographicReach:     toN(p.geo_reach, globalMax.geoReach),
         },
         update: {
-          genreBreadth: genreBreadths[j],
-          sampleUse: sampleUses[j],
-          collaborationRadius: collabRadii[j],
-          eraSpread: eraSpreads[j],
-          instrumentDiversity: instrDiversities[j],
-          geographicReach: geoReaches[j],
+          genreBreadth:        toN(p.genre_breadth, globalMax.genreBreadth),
+          sampleUse:           toN(p.sample_use, globalMax.sampleUse),
+          collaborationRadius: toN(p.collab_radius, globalMax.collabRadius),
+          eraSpread:           toN(p.era_spread, globalMax.eraSpread),
+          instrumentDiversity: toN(p.instrument_diversity, globalMax.instrDiversity),
+          geographicReach:     toN(p.geo_reach, globalMax.geoReach),
         },
       })
     }
