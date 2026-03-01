@@ -65,20 +65,29 @@ export function SearchBar() {
         />
       </div>
       {isPending && (
-        <div className="mt-4 space-y-3">
-          {/* Skeleton loading cards */}
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="flex items-center gap-4 p-4 rounded-xl border bg-card animate-pulse"
-            >
-              <div className="w-12 h-12 rounded-lg bg-muted" />
-              <div className="flex-1 space-y-2">
-                <div className="h-4 w-40 bg-muted rounded" />
-                <div className="h-3 w-24 bg-muted rounded" />
+        <div className="mt-8 w-full max-w-3xl space-y-6">
+          {/* Artist skeleton */}
+          <div className="flex gap-2">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex flex-col items-center gap-2.5 p-4">
+                <div className="w-24 h-24 rounded-full bg-white/5 animate-pulse" />
+                <div className="h-3 w-16 bg-white/5 rounded animate-pulse" />
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+          {/* Song skeletons */}
+          <div className="rounded-xl border border-white/5 overflow-hidden">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className={`flex items-center gap-4 px-4 py-3 ${i % 2 === 1 ? 'bg-white/[0.02]' : ''}`}>
+                <div className="w-5" />
+                <div className="w-11 h-11 rounded-md bg-white/5 animate-pulse" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 w-48 bg-white/5 rounded animate-pulse" />
+                  <div className="h-2.5 w-28 bg-white/5 rounded animate-pulse" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   ReactFlow,
   Node,
@@ -15,35 +16,33 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
-// Connection group definitions — inspired by sample-focused music graph
-const CONNECTION_GROUPS: Record<string, { label: string; color: string; borderColor: string; order: number }> = {
-  'samples material': { label: 'SAMPLES FROM', color: '#ef4444', borderColor: '#dc2626', order: 0 },
-  sample: { label: 'SAMPLES FROM', color: '#ef4444', borderColor: '#dc2626', order: 0 },
-  'samples from': { label: 'SAMPLES FROM', color: '#ef4444', borderColor: '#dc2626', order: 0 },
-  'sampled by': { label: 'SAMPLED BY', color: '#f97316', borderColor: '#ea580c', order: 1 },
-  producer: { label: 'CREDITS', color: '#f59e0b', borderColor: '#d97706', order: 2 },
-  composer: { label: 'CREDITS', color: '#ec4899', borderColor: '#db2777', order: 2 },
-  lyricist: { label: 'CREDITS', color: '#ec4899', borderColor: '#db2777', order: 2 },
-  writer: { label: 'CREDITS', color: '#ec4899', borderColor: '#db2777', order: 2 },
-  arranger: { label: 'CREDITS', color: '#8b5cf6', borderColor: '#7c3aed', order: 2 },
-  'mix': { label: 'CREDITS', color: '#8b5cf6', borderColor: '#7c3aed', order: 2 },
-  'audio': { label: 'CREDITS', color: '#8b5cf6', borderColor: '#7c3aed', order: 2 },
-  engineer: { label: 'CREDITS', color: '#8b5cf6', borderColor: '#7c3aed', order: 2 },
-  performer: { label: 'PERFORMERS', color: '#10b981', borderColor: '#059669', order: 3 },
-  'vocal': { label: 'PERFORMERS', color: '#10b981', borderColor: '#059669', order: 3 },
-  'instrument': { label: 'PERFORMERS', color: '#10b981', borderColor: '#059669', order: 3 },
-  'performance': { label: 'PERFORMERS', color: '#3b82f6', borderColor: '#2563eb', order: 3 },
-  work: { label: 'WORKS', color: '#6366f1', borderColor: '#4f46e5', order: 4 },
+// Ring-based layout: each group has a designated ring (distance from center)
+// Ring 0 = samples (closest), Ring 1 = sampled by, Ring 2 = credits, Ring 3 = performers, Ring 4 = works
+const CONNECTION_GROUPS: Record<string, { label: string; color: string; bg: string; ring: number }> = {
+  'samples material': { label: 'SAMPLES FROM', color: '#c4956a', bg: 'rgba(196,149,106,0.10)', ring: 0 },
+  sample: { label: 'SAMPLES FROM', color: '#c4956a', bg: 'rgba(196,149,106,0.10)', ring: 0 },
+  'samples from': { label: 'SAMPLES FROM', color: '#c4956a', bg: 'rgba(196,149,106,0.10)', ring: 0 },
+  'sampled by': { label: 'SAMPLED BY', color: '#8b9cc4', bg: 'rgba(139,156,196,0.10)', ring: 1 },
+  producer: { label: 'CREDITS', color: '#d6d3d1', bg: 'rgba(214,211,209,0.08)', ring: 2 },
+  composer: { label: 'CREDITS', color: '#d6d3d1', bg: 'rgba(214,211,209,0.08)', ring: 2 },
+  lyricist: { label: 'CREDITS', color: '#d6d3d1', bg: 'rgba(214,211,209,0.08)', ring: 2 },
+  writer: { label: 'CREDITS', color: '#d6d3d1', bg: 'rgba(214,211,209,0.08)', ring: 2 },
+  arranger: { label: 'CREDITS', color: '#d6d3d1', bg: 'rgba(214,211,209,0.08)', ring: 2 },
+  'mix': { label: 'CREDITS', color: '#d6d3d1', bg: 'rgba(214,211,209,0.08)', ring: 2 },
+  'audio': { label: 'CREDITS', color: '#d6d3d1', bg: 'rgba(214,211,209,0.08)', ring: 2 },
+  engineer: { label: 'CREDITS', color: '#d6d3d1', bg: 'rgba(214,211,209,0.08)', ring: 2 },
+  performer: { label: 'PERFORMERS', color: '#a3a3a3', bg: 'rgba(163,163,163,0.08)', ring: 3 },
+  'vocal': { label: 'PERFORMERS', color: '#a3a3a3', bg: 'rgba(163,163,163,0.08)', ring: 3 },
+  'instrument': { label: 'PERFORMERS', color: '#a3a3a3', bg: 'rgba(163,163,163,0.08)', ring: 3 },
+  'performance': { label: 'PERFORMERS', color: '#a3a3a3', bg: 'rgba(163,163,163,0.08)', ring: 3 },
+  work: { label: 'WORKS', color: '#737373', bg: 'rgba(115,115,115,0.08)', ring: 4 },
 }
 
 function getGroupInfo(type: string) {
-  // Try exact match first
   if (CONNECTION_GROUPS[type]) return CONNECTION_GROUPS[type]
-  // Try partial match
   const partial = Object.entries(CONNECTION_GROUPS).find(([key]) => type.toLowerCase().includes(key))
   if (partial) return partial[1]
-  // Default
-  return { label: 'CONNECTIONS', color: '#6b7280', borderColor: '#4b5563', order: 5 }
+  return { label: 'CONNECTIONS', color: '#6b7280', bg: 'rgba(107,114,128,0.08)', ring: 4 }
 }
 
 interface Connection {
@@ -77,7 +76,7 @@ function buildGraphData(
   const albumArt = recording.spotifyData?.album?.images?.[1]?.url || recording.spotifyData?.album?.images?.[0]?.url
   const artistName = recording['artist-credit']?.map(c => c.name || c.artist?.name).join(', ') || ''
 
-  // Center node — the recording itself (large, prominent)
+  // Center node
   nodes.push({
     id: `recording-${recording.id}`,
     position: { x: 0, y: 0 },
@@ -87,27 +86,30 @@ function buildGraphData(
     style: {
       background: albumArt
         ? `url(${albumArt}) center/cover`
-        : 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+        : 'linear-gradient(135deg, #404040, #262626)',
       color: 'white',
-      border: '3px solid rgba(255,255,255,0.3)',
+      border: '3px solid rgba(255,255,255,0.15)',
       borderRadius: '50%',
-      width: '140px',
-      height: '140px',
+      width: '180px',
+      height: '180px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      fontSize: '13px',
+      fontSize: '14px',
       fontWeight: 'bold',
       textAlign: 'center' as const,
-      textShadow: '0 1px 4px rgba(0,0,0,0.8)',
-      boxShadow: '0 0 40px rgba(59,130,246,0.3)',
-      padding: '16px',
-      lineHeight: '1.2',
+      textShadow: '0 2px 8px rgba(0,0,0,0.9)',
+      boxShadow: '0 8px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)',
+      padding: '18px',
+      lineHeight: '1.3',
     },
   })
 
-  // Group connections by their group label
-  const grouped = new Map<string, { info: typeof CONNECTION_GROUPS[string]; conns: Connection[] }>()
+  // Cap nodes per group to prevent overcrowding
+  const MAX_NODES_PER_GROUP = 8
+
+  // Group connections by label
+  const grouped = new Map<string, { info: ReturnType<typeof getGroupInfo>; conns: Connection[] }>()
   connections.forEach((conn) => {
     const info = getGroupInfo(conn.type)
     const key = info.label
@@ -115,118 +117,147 @@ function buildGraphData(
     grouped.get(key)!.conns.push(conn)
   })
 
-  // Sort groups by order
-  const sortedGroups = [...grouped.entries()].sort((a, b) => a[1].info.order - b[1].info.order)
-
+  const sortedGroups = [...grouped.entries()].sort((a, b) => a[1].info.ring - b[1].info.ring)
   const totalGroups = sortedGroups.length
   const addedNodeIds = new Set<string>()
 
+  // Concentric ring radii — well-spaced for legibility
+  const RING_RADII = [280, 480, 680, 880, 1050]
+
+  // Subtle ring guides
+  const usedRings = new Set(sortedGroups.map(([, { info }]) => info.ring))
+  usedRings.forEach((ringIdx) => {
+    const r = RING_RADII[ringIdx] || RING_RADII[RING_RADII.length - 1]
+    nodes.push({
+      id: `ring-guide-${ringIdx}`,
+      position: { x: -r, y: -r },
+      data: { label: '' },
+      selectable: false,
+      draggable: false,
+      style: {
+        background: 'transparent',
+        border: '1px dashed rgba(255,255,255,0.05)',
+        borderRadius: '50%',
+        width: `${r * 2}px`,
+        height: `${r * 2}px`,
+        pointerEvents: 'none' as const,
+      },
+    })
+  })
+
   sortedGroups.forEach(([groupLabel, { info, conns }], groupIdx) => {
-    // Calculate angle for this group's sector
     const sectorAngle = (2 * Math.PI) / Math.max(totalGroups, 1)
     const baseAngle = groupIdx * sectorAngle - Math.PI / 2
+    const ringRadius = RING_RADII[info.ring] || RING_RADII[RING_RADII.length - 1]
 
-    // Add group label node
-    const groupLabelRadius = 180
-    const groupX = Math.cos(baseAngle) * groupLabelRadius
-    const groupY = Math.sin(baseAngle) * groupLabelRadius
-    const groupNodeId = `group-${groupLabel}`
+    // Group label
+    const labelRadius = ringRadius * 0.55
+    const labelX = Math.cos(baseAngle) * labelRadius
+    const labelY = Math.sin(baseAngle) * labelRadius
+
+    const overflow = Math.max(0, conns.length - MAX_NODES_PER_GROUP)
+    const labelText = overflow > 0 ? `${groupLabel} (+${overflow})` : groupLabel
 
     nodes.push({
-      id: groupNodeId,
-      position: { x: groupX, y: groupY },
-      data: { label: groupLabel },
+      id: `group-${groupLabel}`,
+      position: { x: labelX, y: labelY },
+      data: { label: labelText },
       selectable: false,
       draggable: false,
       style: {
         background: 'transparent',
         color: info.color,
         border: 'none',
-        fontSize: '11px',
-        fontWeight: '800',
-        letterSpacing: '2px',
+        fontSize: '12px',
+        fontWeight: '700',
+        letterSpacing: '1.5px',
         textTransform: 'uppercase' as const,
-        padding: '4px 8px',
+        padding: '4px 10px',
         pointerEvents: 'none' as const,
         opacity: 0.7,
       },
     })
 
-    // Add individual connection nodes
-    conns.forEach((conn, i) => {
+    // Cap the nodes shown
+    let placedIdx = 0
+    conns.forEach((conn) => {
       const nodeId = `${conn.targetType}-${conn.targetId}`
-
-      // Skip duplicate nodes
       if (addedNodeIds.has(nodeId)) return
+      if (placedIdx >= MAX_NODES_PER_GROUP) return
       addedNodeIds.add(nodeId)
 
-      const angleSpread = Math.min(0.4, sectorAngle * 0.8 / Math.max(conns.length, 1))
-      const nodeAngle = baseAngle + (i - (conns.length - 1) / 2) * angleSpread
-      const radius = 300 + (i % 2) * 60
+      // Evenly distribute within sector
+      const nodesInSector = Math.min(conns.filter(c => !addedNodeIds.has(`${c.targetType}-${c.targetId}`) || placedIdx < MAX_NODES_PER_GROUP).length + placedIdx, MAX_NODES_PER_GROUP)
+      const maxSpread = sectorAngle * 0.8
+      const angleStep = nodesInSector > 1 ? maxSpread / (nodesInSector - 1) : 0
+      const startAngle = baseAngle - maxSpread / 2
+
+      const nodeAngle = nodesInSector > 1 ? startAngle + placedIdx * angleStep : baseAngle
+      const jitter = (placedIdx % 3 - 1) * 35
+      const radius = ringRadius + jitter
 
       const x = Math.cos(nodeAngle) * radius
       const y = Math.sin(nodeAngle) * radius
 
       const isSample = conn.targetType === 'recording'
       const isSampledBy = conn.type === 'sampled by'
-      const nodeSize = isSample ? '100px' : '70px'
-      const borderRadius = isSample ? '16px' : '24px'
 
       nodes.push({
         id: nodeId,
         position: { x, y },
-        data: {
-          label: conn.targetName,
-        },
+        data: { label: conn.targetName, targetType: conn.targetType, targetId: conn.targetId },
         style: {
-          background: `${info.color}15`,
-          color: 'white',
-          border: `2px solid ${info.color}`,
-          borderRadius,
-          padding: '8px 14px',
-          fontSize: isSample ? '11px' : '11px',
+          background: info.bg,
+          color: '#f5f5f5',
+          border: `1.5px solid ${info.color}60`,
+          borderRadius: isSample ? '14px' : '22px',
+          padding: '12px 18px',
+          fontSize: '13px',
           fontWeight: '500',
-          minWidth: nodeSize,
+          minWidth: isSample ? '120px' : '90px',
+          maxWidth: '200px',
           textAlign: 'center' as const,
-          backdropFilter: 'blur(8px)',
-          boxShadow: `0 0 20px ${info.color}20`,
+          boxShadow: `0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08)`,
+          cursor: 'pointer',
           transition: 'all 0.2s ease',
         },
       })
 
-      // Clear directional labels for sample connections
       const edgeLabel = isSample
-        ? (isSampledBy ? 'sampled by' : 'samples from')
+        ? (isSampledBy ? 'sampled by' : 'samples')
         : conn.type
 
       edges.push({
-        id: `edge-${recording.id}-${conn.targetId}-${conn.type}-${i}`,
+        id: `edge-${recording.id}-${conn.targetId}-${conn.type}-${placedIdx}`,
         source: `recording-${recording.id}`,
         target: nodeId,
         label: edgeLabel,
         labelStyle: {
-          fontSize: isSample ? '10px' : '9px',
-          fill: isSample ? '#fbbf24' : '#9ca3af',
-          fontWeight: isSample ? '600' : '400',
+          fontSize: '10px',
+          fill: '#a3a3a3',
+          fontWeight: '500',
         },
         labelBgStyle: {
-          fill: 'rgba(0,0,0,0.6)',
-          fillOpacity: 0.8,
+          fill: 'rgba(12,12,16,0.9)',
+          fillOpacity: 1,
         },
-        labelBgPadding: [4, 6] as [number, number],
+        labelBgPadding: [5, 8] as [number, number],
         labelShowBg: true,
         style: {
-          stroke: info.color,
-          strokeWidth: isSample ? 2.5 : 1.5,
-          opacity: isSample ? 0.9 : 0.6,
+          stroke: `${info.color}40`,
+          strokeWidth: isSample ? 2 : 1,
         },
         markerEnd: {
           type: MarkerType.ArrowClosed,
-          color: info.color,
+          color: `${info.color}70`,
+          width: 18,
+          height: 18,
         },
         type: 'smoothstep',
         animated: isSample,
       })
+
+      placedIdx++
     })
   })
 
@@ -234,12 +265,20 @@ function buildGraphData(
 }
 
 export function KnowledgeGraph({ recording, connections }: KnowledgeGraphProps) {
+  const router = useRouter()
   const { nodes: initialNodes, edges: initialEdges } = useMemo(
     () => buildGraphData(recording, connections),
     [recording, connections]
   )
   const [nodes, , onNodesChange] = useNodesState(initialNodes)
   const [edges, , onEdgesChange] = useEdgesState(initialEdges)
+
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    const { targetType, targetId } = node.data as { targetType?: string; targetId?: string }
+    if (!targetType || !targetId) return
+    if (targetType === 'artist') router.push(`/artist/${targetId}`)
+    else if (targetType === 'recording') router.push(`/recording/${targetId}`)
+  }, [router])
 
   if (connections.length === 0) {
     return (
@@ -250,41 +289,34 @@ export function KnowledgeGraph({ recording, connections }: KnowledgeGraphProps) 
   }
 
   return (
-    <div className="w-full h-[450px] sm:h-[550px] md:h-[650px] rounded-xl border overflow-hidden" style={{ background: '#0a0a0f' }}>
+    <div className="w-full h-[500px] sm:h-[650px] md:h-[800px] rounded-xl border border-white/5 overflow-hidden" style={{ background: '#0c0c10' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeClick={onNodeClick}
         fitView
-        fitViewOptions={{ padding: 0.3 }}
-        minZoom={0.2}
+        fitViewOptions={{ padding: 0.35 }}
+        minZoom={0.15}
         maxZoom={2.5}
+        zoomOnScroll={false}
+        preventScrolling={false}
         proOptions={{ hideAttribution: true }}
       >
         <Background
           variant={BackgroundVariant.Dots}
-          gap={20}
-          size={1}
-          color="rgba(255,255,255,0.05)"
+          gap={24}
+          size={0.8}
+          color="rgba(255,255,255,0.03)"
         />
         <Controls
-          style={{ background: '#1a1a2e', borderColor: '#333', borderRadius: '8px' }}
+          style={{ background: '#1a1a1e', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '8px' }}
         />
         <MiniMap
-          nodeColor={(node) => {
-            const bg = node.style?.background as string
-            if (bg?.includes('gradient') || bg?.includes('url')) return '#3b82f6'
-            const border = node.style?.borderColor as string || node.style?.border as string
-            if (border?.includes('#ef4444')) return '#ef4444'
-            if (border?.includes('#10b981')) return '#10b981'
-            if (border?.includes('#f59e0b')) return '#f59e0b'
-            if (border?.includes('#8b5cf6')) return '#8b5cf6'
-            if (border?.includes('#ec4899')) return '#ec4899'
-            return '#6b7280'
-          }}
+          nodeColor={() => '#525252'}
           maskColor="rgba(0,0,0,0.7)"
-          style={{ background: '#0a0a0f', borderColor: '#333', borderRadius: '8px' }}
+          style={{ background: '#0c0c10', borderColor: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}
         />
       </ReactFlow>
     </div>

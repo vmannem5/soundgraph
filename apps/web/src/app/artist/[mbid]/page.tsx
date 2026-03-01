@@ -1,4 +1,5 @@
 import { getArtistDetails } from '@/lib/data-service'
+import { prisma } from '@soundgraph/database'
 import * as mb from '@/lib/musicbrainz'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,37 +11,58 @@ interface ArtistPageProps {
   params: Promise<{ mbid: string }>
 }
 
+async function getArtistReleaseGroupsFromDb(mbid: string) {
+  // Get release groups via credits: artist → credits → recordings → release recordings → releases → release groups
+  const results = await prisma.$queryRaw<Array<{
+    mbid: string; title: string; type: string | null; firstReleaseDate: string | null
+  }>>`
+    SELECT DISTINCT rg.mbid, rg.title, rg.type, rg."firstReleaseDate"
+    FROM "Artist" a
+    JOIN "Credit" c ON c."artistId" = a.id
+    JOIN "Recording" r ON r.id = c."recordingId"
+    JOIN "ReleaseRecording" rr ON rr."recordingId" = r.id
+    JOIN "Release" rel ON rel.id = rr."releaseId"
+    JOIN "ReleaseGroup" rg ON rg.id = rel."releaseGroupId"
+    WHERE a.mbid = ${mbid}
+    ORDER BY rg."firstReleaseDate" DESC NULLS LAST
+    LIMIT 30
+  `.catch(() => [])
+
+  return results.map(rg => ({
+    id: rg.mbid,
+    title: rg.title,
+    'primary-type': rg.type,
+    'first-release-date': rg.firstReleaseDate,
+  }))
+}
+
 export default async function ArtistPage({ params }: ArtistPageProps) {
   const { mbid } = await params
 
   let artist: any
-  let releaseGroups: any
   try {
-    ;[artist, releaseGroups] = await Promise.all([
-      getArtistDetails(mbid),
-      mb.getArtistReleaseGroups(mbid, 25),
-    ])
+    artist = await getArtistDetails(mbid)
   } catch {
-    // Retry once after delay (MusicBrainz rate limit is 1 req/sec)
-    try {
-      await new Promise(r => setTimeout(r, 1500))
-        ;[artist, releaseGroups] = await Promise.all([
-          getArtistDetails(mbid),
-          mb.getArtistReleaseGroups(mbid, 25),
-        ])
-    } catch {
-      return (
-        <main className="max-w-4xl mx-auto px-4 py-8 space-y-4">
-          <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-            &larr; Back to search
-          </Link>
-          <p className="text-muted-foreground">
-            Failed to load artist — MusicBrainz may be rate-limiting requests.{' '}
-            <a href={`/artist/${mbid}`} className="underline hover:text-foreground">Try again</a>
-          </p>
-        </main>
-      )
-    }
+    return (
+      <main className="max-w-4xl mx-auto px-4 py-8 space-y-4">
+        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
+          &larr; Back to search
+        </Link>
+        <p className="text-muted-foreground">
+          Artist not found.{' '}
+          <Link href="/" className="underline hover:text-foreground">Back to search</Link>
+        </p>
+      </main>
+    )
+  }
+
+  // Try API for release groups, fall back to DB
+  let releaseGroupsList: any[] = []
+  try {
+    const rgs = await mb.getArtistReleaseGroups(mbid, 25)
+    releaseGroupsList = rgs['release-groups'] || []
+  } catch {
+    releaseGroupsList = await getArtistReleaseGroupsFromDb(mbid)
   }
 
   const tags = artist.tags?.slice(0, 10) || []
@@ -64,7 +86,7 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
               className="w-40 h-40 rounded-full object-cover ring-4 ring-border shadow-xl"
             />
           ) : (
-            <div className="w-40 h-40 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-5xl font-bold shadow-xl">
+            <div className="w-40 h-40 rounded-full bg-gradient-to-br from-neutral-600 to-neutral-800 flex items-center justify-center text-white text-5xl font-bold shadow-xl">
               {artist.name?.[0]?.toUpperCase() || '?'}
             </div>
           )}
@@ -114,7 +136,7 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
         </CardHeader>
         <CardContent>
           <div className="space-y-1">
-            {releaseGroups['release-groups']?.map((rg: any) => (
+            {releaseGroupsList.map((rg: any) => (
               <Link
                 key={rg.id}
                 href={`/release-group/${rg.id}`}
@@ -129,7 +151,7 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
                 <Badge variant="outline">{rg['primary-type'] || 'Release'}</Badge>
               </Link>
             ))}
-            {!releaseGroups['release-groups']?.length && (
+            {releaseGroupsList.length === 0 && (
               <p className="text-muted-foreground text-sm py-4">No releases found.</p>
             )}
           </div>

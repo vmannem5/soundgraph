@@ -47,14 +47,14 @@ export async function searchAll(query: string) {
   // Full-text search: "miles davis" => "miles:* & davis:*" (prefix match with AND)
   const tsQuery = sanitized.split(/\s+/).map(t => `${t}:*`).join(' & ')
 
-  // Fast GIN-indexed full-text search on DB
+  // Fast GIN-indexed full-text search on DB, ranked by pre-computed popularity score
   const [dbArtists, dbRecordings] = await Promise.all([
     prisma.$queryRaw<Array<{
       id: string; mbid: string; name: string; type: string | null
       country: string | null; disambiguation: string | null; rank: number
     }>>`
       SELECT id, mbid, name, type, country, disambiguation,
-             ts_rank("search_vector", to_tsquery('english', ${tsQuery})) AS rank
+             COALESCE(popularity, 0) AS rank
       FROM "Artist"
       WHERE "search_vector" @@ to_tsquery('english', ${tsQuery})
       ORDER BY rank DESC
@@ -65,7 +65,7 @@ export async function searchAll(query: string) {
       id: string; mbid: string; title: string; length: number | null; rank: number
     }>>`
       SELECT id, mbid, title, length,
-             ts_rank("search_vector", to_tsquery('english', ${tsQuery})) AS rank
+             COALESCE(popularity, 0) AS rank
       FROM "Recording"
       WHERE "search_vector" @@ to_tsquery('english', ${tsQuery})
       ORDER BY rank DESC
@@ -83,7 +83,7 @@ export async function searchAll(query: string) {
       dbArtists.length < MIN_DB_RESULTS
         ? prisma.$queryRaw<typeof dbArtists>`
             SELECT id, mbid, name, type, country, disambiguation,
-                   similarity(name, ${sanitized}) AS rank
+                   COALESCE(popularity, 0) AS rank
             FROM "Artist" WHERE name % ${sanitized}
             ORDER BY rank DESC LIMIT 5
           `.catch(() => [])
@@ -91,7 +91,7 @@ export async function searchAll(query: string) {
       dbRecordings.length < MIN_DB_RESULTS
         ? prisma.$queryRaw<typeof dbRecordings>`
             SELECT id, mbid, title, length,
-                   similarity(title, ${sanitized}) AS rank
+                   COALESCE(popularity, 0) AS rank
             FROM "Recording" WHERE title % ${sanitized}
             ORDER BY rank DESC LIMIT 5
           `.catch(() => [])
@@ -128,31 +128,71 @@ export async function searchAll(query: string) {
     _fromDb: true,
   }))
 
-  // Only call external APIs if DB results are sparse
-  const needApi = allArtists.length < MIN_DB_RESULTS || allRecordings.length < MIN_DB_RESULTS
-  let mbArtistsList: any[] = []
-  let mbRecordingsList: any[] = []
-  let spotifyResults: any = null
+  // Always call Spotify for popularity-based re-ranking + images
+  const needMbApi = allArtists.length < MIN_DB_RESULTS || allRecordings.length < MIN_DB_RESULTS
+  const [mbA, mbR, spRes] = await Promise.all([
+    needMbApi && allArtists.length < MIN_DB_RESULTS ? mb.searchArtists(query, 5).catch(() => null) : null,
+    needMbApi && allRecordings.length < MIN_DB_RESULTS ? mb.searchRecordings(query, 5).catch(() => null) : null,
+    spotify.searchSpotify(query, 'track,artist', 10).catch(() => null),
+  ])
+  const mbArtistsList: any[] = (mbA?.artists as any[]) || []
+  const mbRecordingsList: any[] = (mbR?.recordings as any[]) || []
+  const spotifyTracks: any[] = spRes?.tracks?.items || []
+  const spotifyArtists: any[] = spRes?.artists?.items || []
 
-  if (needApi) {
-    const [mbA, mbR, spRes] = await Promise.all([
-      allArtists.length < MIN_DB_RESULTS ? mb.searchArtists(query, 5).catch(() => null) : null,
-      allRecordings.length < MIN_DB_RESULTS ? mb.searchRecordings(query, 5).catch(() => null) : null,
-      spotify.searchSpotify(query, 'track,artist', 5).catch(() => null),
-    ])
-    mbArtistsList = (mbA?.artists as any[]) || []
-    mbRecordingsList = (mbR?.recordings as any[]) || []
-    spotifyResults = spRes
-  }
+  // Build Spotify lookup maps keyed by "title::artist" for precise matching
+  const spTracksByTitleArtist = new Map<string, { popularity: number; artists: string[] }>()
+  const spTracksByTitle = new Map<string, number>()
+  spotifyTracks.forEach((t: any) => {
+    const title = t.name?.toLowerCase()
+    if (!title) return
+    const artists = (t.artists || []).map((a: any) => a.name?.toLowerCase()).filter(Boolean)
+    artists.forEach((artist: string) => {
+      const key = `${title}::${artist}`
+      const existing = spTracksByTitleArtist.get(key)
+      if (!existing || t.popularity > existing.popularity) {
+        spTracksByTitleArtist.set(key, { popularity: t.popularity || 0, artists })
+      }
+    })
+    spTracksByTitle.set(title, Math.max(spTracksByTitle.get(title) || 0, t.popularity || 0))
+  })
+  const spArtistMap = new Map<string, number>()
+  spotifyArtists.forEach((a: any) => {
+    const key = a.name?.toLowerCase()
+    if (key && a.popularity) spArtistMap.set(key, Math.max(spArtistMap.get(key) || 0, a.popularity))
+  })
+
+  // Re-rank DB recordings using Spotify popularity with title+artist matching
+  const boostedRecordings = dbRecordingsMapped.map(r => {
+    const title = r.title?.toLowerCase()
+    const dbArtists = (r['artist-credit'] || []).map((c: any) => c.name?.toLowerCase()).filter(Boolean)
+
+    // Best match: exact title+artist combo from Spotify
+    let bestPop = 0
+    for (const artist of dbArtists) {
+      const match = spTracksByTitleArtist.get(`${title}::${artist}`)
+      if (match && match.popularity > bestPop) bestPop = match.popularity
+    }
+    // Fallback: title-only match (weaker signal)
+    if (bestPop === 0) bestPop = (spTracksByTitle.get(title) || 0) * 0.3
+
+    return { ...r, _sortScore: bestPop }
+  }).sort((a, b) => b._sortScore - a._sortScore)
+
+  // Re-rank DB artists with Spotify popularity
+  const boostedArtists = dbArtistsMapped.map(a => {
+    const spPop = spArtistMap.get(a.name?.toLowerCase()) || 0
+    return { ...a, _sortScore: spPop }
+  }).sort((a, b) => b._sortScore - a._sortScore)
 
   const dbArtistMbids = new Set(allArtists.map(a => a.mbid))
   const dbRecordingMbids = new Set(allRecordings.map(r => r.mbid))
 
   return {
-    artists: [...dbArtistsMapped, ...mbArtistsList.filter((a: any) => !dbArtistMbids.has(a.id))].slice(0, 10),
-    recordings: [...dbRecordingsMapped, ...mbRecordingsList.filter((r: any) => !dbRecordingMbids.has(r.id))].slice(0, 10),
-    spotifyTracks: spotifyResults?.tracks?.items || [],
-    spotifyArtists: spotifyResults?.artists?.items || [],
+    artists: [...boostedArtists, ...mbArtistsList.filter((a: any) => !dbArtistMbids.has(a.id))].slice(0, 10),
+    recordings: [...boostedRecordings, ...mbRecordingsList.filter((r: any) => !dbRecordingMbids.has(r.id))].slice(0, 10),
+    spotifyTracks,
+    spotifyArtists,
   }
 }
 
@@ -166,39 +206,55 @@ export async function getArtistDetails(mbid: string) {
     },
   }).catch(() => null)
 
-  // Always fetch from MB API for full details (has relations, life-span, etc.)
+  // Check API cache
   const key = cacheKey('mb', 'artist', mbid)
   const cached = await getCached<Record<string, unknown>>(key)
   if (cached) {
-    // Enrich cached data with DB data
     if (dbArtist) {
       (cached as any).tags = (cached as any).tags || dbArtist.tags.map(t => ({ name: t.tag, count: t.count }))
     }
     return cached
   }
 
-  const artist = await mb.getArtist(mbid)
+  // Try MB API (may fail due to rate limits or TLS issues)
+  try {
+    const artist = await mb.getArtist(mbid)
 
-  // Try to find Spotify data via URL relations
-  const spotifyUrl = artist.relations?.find(
-    (r: any) => (r.type === 'streaming' || r.type === 'free streaming') && r.url?.resource?.includes('spotify.com')
-  )
-  let spotifyData = null
-  if (spotifyUrl) {
-    const spotifyId = spotifyUrl.url.resource.match(/artist\/([a-zA-Z0-9]+)/)?.[1]
-    if (spotifyId) {
-      spotifyData = await spotify.getSpotifyArtist(spotifyId).catch(() => null)
+    const spotifyUrl = artist.relations?.find(
+      (r: any) => (r.type === 'streaming' || r.type === 'free streaming') && r.url?.resource?.includes('spotify.com')
+    )
+    let spotifyData = null
+    if (spotifyUrl) {
+      const spotifyId = spotifyUrl.url.resource.match(/artist\/([a-zA-Z0-9]+)/)?.[1]
+      if (spotifyId) {
+        spotifyData = await spotify.getSpotifyArtist(spotifyId).catch(() => null)
+      }
     }
-  }
 
-  // Merge DB tags if MB tags are sparse
-  const result: any = { ...artist, spotifyData }
-  if (dbArtist && (!result.tags || result.tags.length === 0)) {
-    result.tags = dbArtist.tags.map(t => ({ name: t.tag, count: t.count }))
-  }
+    const result: any = { ...artist, spotifyData }
+    if (dbArtist && (!result.tags || result.tags.length === 0)) {
+      result.tags = dbArtist.tags.map(t => ({ name: t.tag, count: t.count }))
+    }
 
-  await setCache(key, result as Prisma.InputJsonValue, 'musicbrainz')
-  return result
+    await setCache(key, result as Prisma.InputJsonValue, 'musicbrainz')
+    return result
+  } catch {
+    // API failed — serve from DB if available
+    if (dbArtist) {
+      return {
+        id: dbArtist.mbid,
+        name: dbArtist.name,
+        'sort-name': dbArtist.sortName,
+        type: dbArtist.type,
+        country: dbArtist.country,
+        disambiguation: dbArtist.disambiguation,
+        tags: dbArtist.tags.map(t => ({ name: t.tag, count: t.count })),
+        aliases: dbArtist.aliases.map(a => ({ name: a.name, locale: a.locale })),
+        _fromDb: true,
+      }
+    }
+    throw new Error('Artist not found')
+  }
 }
 
 export async function getRecordingDetails(mbid: string) {
@@ -206,25 +262,70 @@ export async function getRecordingDetails(mbid: string) {
   const cached = await getCached<Record<string, unknown>>(key)
   if (cached) return cached
 
-  const recording = await mb.getRecording(mbid)
+  // Try DB first for basic data
+  const dbRecording = await prisma.recording.findUnique({
+    where: { mbid },
+    include: {
+      credits: { include: { artist: true }, where: { role: 'performer' } },
+      tags: { orderBy: { count: 'desc' }, take: 10 },
+    },
+  }).catch(() => null)
 
-  // Try to enrich with Spotify data via ISRC
-  let spotifyData = null
-  if (recording.isrcs?.length > 0) {
-    const isrc = recording.isrcs[0]
-    const results = await spotify.searchByIsrc(isrc).catch(() => null)
-    if (results?.tracks?.items?.length > 0) {
-      spotifyData = results.tracks.items[0]
+  // Try MB API
+  try {
+    const recording = await mb.getRecording(mbid)
+
+    let spotifyData = null
+    if (recording.isrcs?.length > 0) {
+      const isrc = recording.isrcs[0]
+      const results = await spotify.searchByIsrc(isrc).catch(() => null)
+      if (results?.tracks?.items?.length > 0) {
+        spotifyData = results.tracks.items[0]
+      }
     }
-  }
 
-  const result = { ...recording, spotifyData }
-  await setCache(key, result as Prisma.InputJsonValue, 'musicbrainz')
-  return result
+    const result = { ...recording, spotifyData }
+    await setCache(key, result as Prisma.InputJsonValue, 'musicbrainz')
+    return result
+  } catch {
+    // API failed — serve from DB
+    if (dbRecording) {
+      // Try Spotify enrichment via ISRC
+      let spotifyData = null
+      if (dbRecording.isrc) {
+        const results = await spotify.searchByIsrc(dbRecording.isrc).catch(() => null)
+        if (results?.tracks?.items?.length > 0) {
+          spotifyData = results.tracks.items[0]
+        }
+      }
+
+      return {
+        id: dbRecording.mbid,
+        title: dbRecording.title,
+        length: dbRecording.length,
+        isrcs: dbRecording.isrc ? [dbRecording.isrc] : [],
+        'artist-credit': dbRecording.credits.map(c => ({
+          name: c.artist.name,
+          artist: { id: c.artist.mbid, name: c.artist.name },
+        })),
+        tags: dbRecording.tags.map(t => ({ name: t.tag, count: t.count })),
+        spotifyData,
+        _fromDb: true,
+      }
+    }
+    throw new Error('Recording not found')
+  }
 }
 
 export async function getRecordingConnections(mbid: string) {
-  const recording = await getRecordingDetails(mbid)
+  let recording: any
+  try {
+    recording = await getRecordingDetails(mbid)
+  } catch {
+    // Minimal recording object if everything fails
+    const dbRec = await prisma.recording.findUnique({ where: { mbid } }).catch(() => null)
+    recording = dbRec ? { id: dbRec.mbid, title: dbRec.title, length: dbRec.length } : { id: mbid, title: 'Unknown' }
+  }
 
   const connections: {
     type: string
