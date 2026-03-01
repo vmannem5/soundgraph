@@ -213,13 +213,13 @@ model ApiCache {
 // === GENUS: Sound Taxonomy ===
 
 model GenreTaxonomy {
-  id            Int     @id @default(autoincrement())
+  id            String  @id @default(cuid())
   name          String
   slug          String  @unique
   level         String  // family | movement | scene | sound | strain
-  parentId      Int?
+  parentId      String?
   description   String?
-  specimenCount Int     @default(0)
+  specimenCount Int     @default(0) // NOTE: needs manual refresh (see popularity field pattern in CLAUDE.md)
 
   parent        GenreTaxonomy?  @relation("TaxonomyTree", fields: [parentId], references: [id])
   children      GenreTaxonomy[] @relation("TaxonomyTree")
@@ -231,11 +231,11 @@ model GenreTaxonomy {
 }
 
 model SpecimenClassification {
-  id          Int    @id @default(autoincrement())
-  entityType  String // "artist" | "recording"
+  id          String  @id @default(cuid())
+  entityType  String  // "artist" | "recording"
   entityMbid  String
-  taxonomyId  Int
-  confidence  Float  @default(1.0)
+  taxonomyId  String
+  confidence  Float   @default(1.0)
 
   taxonomy    GenreTaxonomy @relation(fields: [taxonomyId], references: [id])
 
@@ -245,15 +245,15 @@ model SpecimenClassification {
 }
 
 model SoundProfile {
-  id                  Int    @id @default(autoincrement())
-  entityType          String // "artist"
-  entityMbid          String @unique
-  genreBreadth        Float  @default(0)
-  sampleUse           Float  @default(0)
-  collaborationRadius Float  @default(0)
-  eraSpread           Float  @default(0)
-  instrumentDiversity Float  @default(0)
-  geographicReach     Float  @default(0)
+  id                  String  @id @default(cuid())
+  entityType          String  // "artist"
+  entityMbid          String  @unique
+  genreBreadth        Float   @default(0)
+  sampleUse           Float   @default(0)
+  collaborationRadius Float   @default(0)
+  eraSpread           Float   @default(0)
+  instrumentDiversity Float   @default(0)
+  geographicReach     Float   @default(0)
 
   @@index([entityType])
 }
