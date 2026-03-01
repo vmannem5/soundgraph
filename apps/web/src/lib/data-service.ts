@@ -334,6 +334,7 @@ export async function getRecordingConnections(mbid: string) {
     targetId: string
     targetName: string
     attributes?: string[]
+    importance?: number
   }[] = []
 
   // === DB connections (from Prisma — includes samples, credits) ===
@@ -357,6 +358,7 @@ export async function getRecordingConnections(mbid: string) {
         targetId: credit.artist.mbid,
         targetName: credit.artist.name,
         attributes: credit.instrument ? [credit.instrument] : undefined,
+        importance: credit.artist.popularity || 0,
       })
     }
 
@@ -369,6 +371,7 @@ export async function getRecordingConnections(mbid: string) {
         targetType: 'recording',
         targetId: sample.sampledTrack.mbid,
         targetName: `${sample.sampledTrack.title}${artistName ? ` (${artistName})` : ''}`,
+        importance: sample.sampledTrack.popularity || 0,
       })
     }
 
@@ -381,6 +384,7 @@ export async function getRecordingConnections(mbid: string) {
         targetType: 'recording',
         targetId: sample.samplingTrack.mbid,
         targetName: `${sample.samplingTrack.title}${artistName ? ` (${artistName})` : ''}`,
+        importance: sample.samplingTrack.popularity || 0,
       })
     }
   }
@@ -484,9 +488,11 @@ export async function getArtistConnections(mbid: string) {
       prisma.$queryRaw<Array<{
         rec_mbid: string; rec_title: string
         artist_mbid: string | null; artist_name: string | null
+        popularity: number | null
       }>>`
         SELECT r_sampled.mbid as rec_mbid, r_sampled.title as rec_title,
-               MIN(a_src.mbid) as artist_mbid, MIN(a_src.name) as artist_name
+               MIN(a_src.mbid) as artist_mbid, MIN(a_src.name) as artist_name,
+               r_sampled.popularity as popularity
         FROM "Artist" a
         JOIN "Credit" c ON c."artistId" = a.id
         JOIN "Recording" r ON r.id = c."recordingId"
@@ -504,9 +510,11 @@ export async function getArtistConnections(mbid: string) {
       prisma.$queryRaw<Array<{
         rec_mbid: string; rec_title: string
         artist_mbid: string | null; artist_name: string | null
+        popularity: number | null
       }>>`
         SELECT r_sampling.mbid as rec_mbid, r_sampling.title as rec_title,
-               MIN(a_dest.mbid) as artist_mbid, MIN(a_dest.name) as artist_name
+               MIN(a_dest.mbid) as artist_mbid, MIN(a_dest.name) as artist_name,
+               r_sampling.popularity as popularity
         FROM "Artist" a
         JOIN "Credit" c ON c."artistId" = a.id
         JOIN "Recording" r ON r.id = c."recordingId"
