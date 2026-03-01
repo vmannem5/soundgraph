@@ -213,7 +213,7 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
       </div>
 
       {/* Connections section */}
-      {(topCollaborators.length > 0 || topProducers.length > 0 || samplesFrom.length > 0 || sampledBy.length > 0) && (
+      {(topCollaborators.length > 0 || topProducers.length > 0 || samplesFrom.length > 0 || sampledBy.length > 0 || allGenres.length > 0) && (
         <div className="max-w-6xl mx-auto px-4 sm:px-8 pb-8 space-y-10">
 
           {/* Top Collaborators */}
@@ -330,7 +330,7 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
           )}
 
           {/* Connections */}
-          {(topCollaborators.length > 0 || topProducers.length > 0 || samplesFrom.length > 0 || sampledBy.length > 0) && (
+          {(topCollaborators.length > 0 || topProducers.length > 0 || samplesFrom.length > 0 || sampledBy.length > 0 || allGenres.length > 0) && (
             <section>
               <h2 className="text-xl font-semibold mb-4">Connections</h2>
               <ConnectionBubbles
