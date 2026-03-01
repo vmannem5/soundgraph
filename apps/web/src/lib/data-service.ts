@@ -330,7 +330,7 @@ export async function getRecordingConnections(mbid: string) {
   const connections: {
     type: string
     label: string
-    targetType: string
+    targetType: 'artist' | 'recording' | 'tag' | 'work'
     targetId: string
     targetName: string
     attributes?: string[]

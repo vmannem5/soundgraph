@@ -9,7 +9,7 @@ import { hierarchy, pack } from 'd3-hierarchy'
 export interface Connection {
   type: string
   label: string
-  targetType: string
+  targetType: 'artist' | 'recording' | 'tag' | 'work'
   targetId: string
   targetName: string
   importance?: number
@@ -28,7 +28,8 @@ interface CategoryData {
 interface LeafData {
   id: string
   name: string
-  targetType: string
+  targetName: string
+  targetType: 'artist' | 'recording' | 'tag' | 'work'
   targetId: string
   importance: number
 }
@@ -40,13 +41,15 @@ const CAT = {
   SAMPLED_BY:   { label: 'Sampled By',   color: '#6b9ae8', bg: 'rgba(107,154,232,0.22)' },
   CREDITS:      { label: 'Credits',      color: '#7cc4a8', bg: 'rgba(124,196,168,0.18)' },
   PERFORMERS:   { label: 'Performers',   color: '#b87dc4', bg: 'rgba(184,125,196,0.18)' },
+  GENRES:       { label: 'Genres',       color: '#f0d060', bg: 'rgba(240,208,96,0.18)'  },
 } as const
 
-const CAT_ORDER = ['SAMPLES_FROM', 'SAMPLED_BY', 'CREDITS', 'PERFORMERS'] as const
+const CAT_ORDER = ['SAMPLES_FROM', 'SAMPLED_BY', 'GENRES', 'CREDITS', 'PERFORMERS'] as const
 type CatKey = typeof CAT_ORDER[number]
 
 function getCatKey(type: string): CatKey {
   const t = type.toLowerCase()
+  if (t === 'genre') return 'GENRES'
   if (t.includes('sample') && !t.includes('by')) return 'SAMPLES_FROM'
   if (t === 'sampled by' || t.includes('sampled by')) return 'SAMPLED_BY'
   if (t === 'performer' || t.includes('vocal') || t.includes('instrument')) return 'PERFORMERS'
@@ -81,6 +84,7 @@ function buildCategories(connections: Connection[]): CategoryData[] {
       const leaves: LeafData[] = conns.slice(0, 15).map(c => ({
         id: `leaf-${c.targetId}-${c.type}`,
         name: c.targetName,
+        targetName: c.targetName,
         targetType: c.targetType,
         targetId: c.targetId,
         importance: norm(c.importance || 1),
@@ -272,6 +276,7 @@ export function ConnectionBubbles({ connections }: { connections: Connection[] }
                       e.stopPropagation()
                       if (ld.targetType === 'artist') router.push(`/artist/${ld.targetId}`)
                       else if (ld.targetType === 'recording') router.push(`/recording/${ld.targetId}`)
+                      else if (ld.targetType === 'tag') router.push(`/?q=${encodeURIComponent(ld.targetName)}`)
                     }}
                     onMouseEnter={() => {
                       if (lr < 28) setTooltip({ text: ld.name, x: lx, y: ly - lr - 8 })
