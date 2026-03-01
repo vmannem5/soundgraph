@@ -449,3 +449,111 @@ export async function getRecordingConnections(mbid: string) {
 
   return { recording, connections }
 }
+
+export async function getArtistConnections(mbid: string) {
+  try {
+    const [topCollaborators, topProducers, samplesFrom, sampledBy] = await Promise.all([
+      // Top collaborators: artists who share recordings with this artist
+      prisma.$queryRaw<Array<{ mbid: string; name: string; count: number }>>`
+        SELECT a2.mbid, a2.name, count(DISTINCT c1."recordingId")::int as count
+        FROM "Artist" a1
+        JOIN "Credit" c1 ON c1."artistId" = a1.id
+        JOIN "Credit" c2 ON c2."recordingId" = c1."recordingId" AND c2."artistId" != a1.id
+        JOIN "Artist" a2 ON a2.id = c2."artistId"
+        WHERE a1.mbid = ${mbid}
+        GROUP BY a2.id, a2.mbid, a2.name
+        ORDER BY count DESC
+        LIMIT 12
+      `.catch(() => []),
+
+      // Top producers of this artist's recordings
+      prisma.$queryRaw<Array<{ mbid: string; name: string; count: number }>>`
+        SELECT a2.mbid, a2.name, count(DISTINCT c1."recordingId")::int as count
+        FROM "Artist" a1
+        JOIN "Credit" c1 ON c1."artistId" = a1.id
+        JOIN "Credit" c2 ON c2."recordingId" = c1."recordingId"
+          AND c2.role = 'producer' AND c2."artistId" != a1.id
+        JOIN "Artist" a2 ON a2.id = c2."artistId"
+        WHERE a1.mbid = ${mbid}
+        GROUP BY a2.id, a2.mbid, a2.name
+        ORDER BY count DESC
+        LIMIT 8
+      `.catch(() => []),
+
+      // Recordings this artist has sampled (this artist = samplingTrack)
+      prisma.$queryRaw<Array<{
+        rec_mbid: string; rec_title: string
+        artist_mbid: string | null; artist_name: string | null
+      }>>`
+        SELECT r_sampled.mbid as rec_mbid, r_sampled.title as rec_title,
+               MIN(a_src.mbid) as artist_mbid, MIN(a_src.name) as artist_name
+        FROM "Artist" a
+        JOIN "Credit" c ON c."artistId" = a.id
+        JOIN "Recording" r ON r.id = c."recordingId"
+        JOIN "SampleRelation" sr ON sr."samplingTrackId" = r.id
+        JOIN "Recording" r_sampled ON r_sampled.id = sr."sampledTrackId"
+        LEFT JOIN "Credit" c_src ON c_src."recordingId" = r_sampled.id AND c_src.role = 'performer'
+        LEFT JOIN "Artist" a_src ON a_src.id = c_src."artistId" AND a_src.mbid != ${mbid}
+        WHERE a.mbid = ${mbid}
+        GROUP BY r_sampled.id, r_sampled.mbid, r_sampled.title, r_sampled.popularity
+        ORDER BY r_sampled.popularity DESC NULLS LAST
+        LIMIT 10
+      `.catch(() => []),
+
+      // Recordings that sampled this artist's music (this artist = sampledTrack)
+      prisma.$queryRaw<Array<{
+        rec_mbid: string; rec_title: string
+        artist_mbid: string | null; artist_name: string | null
+      }>>`
+        SELECT r_sampling.mbid as rec_mbid, r_sampling.title as rec_title,
+               MIN(a_dest.mbid) as artist_mbid, MIN(a_dest.name) as artist_name
+        FROM "Artist" a
+        JOIN "Credit" c ON c."artistId" = a.id
+        JOIN "Recording" r ON r.id = c."recordingId"
+        JOIN "SampleRelation" sr ON sr."sampledTrackId" = r.id
+        JOIN "Recording" r_sampling ON r_sampling.id = sr."samplingTrackId"
+        LEFT JOIN "Credit" c_dest ON c_dest."recordingId" = r_sampling.id AND c_dest.role = 'performer'
+        LEFT JOIN "Artist" a_dest ON a_dest.id = c_dest."artistId" AND a_dest.mbid != ${mbid}
+        WHERE a.mbid = ${mbid}
+        GROUP BY r_sampling.id, r_sampling.mbid, r_sampling.title, r_sampling.popularity
+        ORDER BY r_sampling.popularity DESC NULLS LAST
+        LIMIT 10
+      `.catch(() => []),
+    ])
+    return { topCollaborators, topProducers, samplesFrom, sampledBy }
+  } catch {
+    return { topCollaborators: [], topProducers: [], samplesFrom: [], sampledBy: [] }
+  }
+}
+
+export async function getDiscoveryData() {
+  try {
+    const [mostSampled, topProducers] = await Promise.all([
+      prisma.$queryRaw<Array<{
+        mbid: string; title: string; sample_count: number
+      }>>`
+        SELECT r.mbid, r.title, count(sr.id)::int as sample_count
+        FROM "Recording" r
+        JOIN "SampleRelation" sr ON sr."sampledTrackId" = r.id
+        WHERE r.popularity > 20
+        GROUP BY r.id, r.mbid, r.title
+        ORDER BY sample_count DESC, r.popularity DESC
+        LIMIT 20
+      `,
+      prisma.$queryRaw<Array<{
+        mbid: string; name: string; credit_count: number
+      }>>`
+        SELECT a.mbid, a.name, count(c.id)::int as credit_count
+        FROM "Artist" a
+        JOIN "Credit" c ON c."artistId" = a.id
+        WHERE c.role = 'producer'
+        GROUP BY a.id, a.mbid, a.name
+        ORDER BY credit_count DESC
+        LIMIT 12
+      `,
+    ])
+    return { mostSampled, topProducers }
+  } catch {
+    return { mostSampled: [], topProducers: [] }
+  }
+}
