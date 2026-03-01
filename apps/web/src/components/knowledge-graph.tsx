@@ -88,7 +88,7 @@ function buildGraphData(
         ? `url(${albumArt}) center/cover`
         : 'linear-gradient(135deg, #404040, #262626)',
       color: 'white',
-      border: '3px solid rgba(255,255,255,0.15)',
+      border: '2px solid oklch(0.75 0.15 70 / 0.4)',
       borderRadius: '50%',
       width: '180px',
       height: '180px',
@@ -99,7 +99,7 @@ function buildGraphData(
       fontWeight: 'bold',
       textAlign: 'center' as const,
       textShadow: '0 2px 8px rgba(0,0,0,0.9)',
-      boxShadow: '0 8px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)',
+      boxShadow: '0 8px 40px rgba(0,0,0,0.5), 0 0 40px 8px oklch(0.75 0.15 70 / 0.25)',
       padding: '18px',
       lineHeight: '1.3',
     },
@@ -267,6 +267,7 @@ function buildGraphData(
 export function KnowledgeGraph({ recording, connections }: KnowledgeGraphProps) {
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
+  const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   useEffect(() => setMounted(true), [])
 
   const { nodes: initialNodes, edges: initialEdges } = useMemo(
@@ -276,12 +277,23 @@ export function KnowledgeGraph({ recording, connections }: KnowledgeGraphProps) 
   const [nodes, , onNodesChange] = useNodesState(initialNodes)
   const [edges, , onEdgesChange] = useEdgesState(initialEdges)
 
-  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+  const navigateToNode = useCallback((node: Node) => {
     const { targetType, targetId } = node.data as { targetType?: string; targetId?: string }
     if (!targetType || !targetId) return
     if (targetType === 'artist') router.push(`/artist/${targetId}`)
     else if (targetType === 'recording') router.push(`/recording/${targetId}`)
   }, [router])
+
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    const { targetType, targetId } = node.data as { targetType?: string; targetId?: string }
+    if (!targetType || !targetId) return
+    setSelectedNode(node)
+  }, [])
+
+  const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: Node) => {
+    setSelectedNode(null)
+    navigateToNode(node)
+  }, [navigateToNode])
 
   if (!mounted) {
     return (
@@ -305,6 +317,7 @@ export function KnowledgeGraph({ recording, connections }: KnowledgeGraphProps) 
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
         fitView
         fitViewOptions={{ padding: 0.35 }}
         minZoom={0.15}
@@ -326,6 +339,77 @@ export function KnowledgeGraph({ recording, connections }: KnowledgeGraphProps) 
           style={{ background: '#0c0c10', borderColor: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}
         />
       </ReactFlow>
+
+      {/* Single-click info popover */}
+      {selectedNode && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '16px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'rgba(18,18,24,0.95)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            borderRadius: '12px',
+            padding: '14px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(12px)',
+            zIndex: 10,
+            maxWidth: '360px',
+            minWidth: '240px',
+          }}
+        >
+          <span
+            style={{
+              flex: 1,
+              color: '#f5f5f5',
+              fontSize: '14px',
+              fontWeight: 500,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {String(selectedNode.data.label ?? '')}
+          </span>
+          <button
+            onClick={() => navigateToNode(selectedNode)}
+            style={{
+              background: 'oklch(0.75 0.15 70 / 0.15)',
+              border: '1px solid oklch(0.75 0.15 70 / 0.4)',
+              color: 'oklch(0.85 0.12 70)',
+              borderRadius: '8px',
+              padding: '6px 16px',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              flexShrink: 0,
+              transition: 'background 0.15s ease',
+            }}
+          >
+            View
+          </button>
+          <button
+            onClick={() => setSelectedNode(null)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#737373',
+              cursor: 'pointer',
+              fontSize: '18px',
+              lineHeight: 1,
+              padding: '0 2px',
+              flexShrink: 0,
+            }}
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   )
 }

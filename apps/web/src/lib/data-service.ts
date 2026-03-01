@@ -449,3 +449,35 @@ export async function getRecordingConnections(mbid: string) {
 
   return { recording, connections }
 }
+
+export async function getDiscoveryData() {
+  try {
+    const [mostSampled, topProducers] = await Promise.all([
+      prisma.$queryRaw<Array<{
+        mbid: string; title: string; sample_count: number
+      }>>`
+        SELECT r.mbid, r.title,
+          (SELECT count(*)::int FROM "SampleRelation" WHERE "sampledRecordingId" = r.id) as sample_count
+        FROM "Recording" r
+        WHERE EXISTS (SELECT 1 FROM "SampleRelation" WHERE "sampledRecordingId" = r.id)
+          AND r.popularity > 20
+        ORDER BY sample_count DESC, r.popularity DESC
+        LIMIT 20
+      `,
+      prisma.$queryRaw<Array<{
+        mbid: string; name: string; credit_count: number
+      }>>`
+        SELECT a.mbid, a.name, count(c.id)::int as credit_count
+        FROM "Artist" a
+        JOIN "Credit" c ON c."artistId" = a.id
+        WHERE c.role = 'producer'
+        GROUP BY a.id, a.mbid, a.name
+        ORDER BY credit_count DESC
+        LIMIT 12
+      `,
+    ])
+    return { mostSampled, topProducers }
+  } catch {
+    return { mostSampled: [], topProducers: [] }
+  }
+}

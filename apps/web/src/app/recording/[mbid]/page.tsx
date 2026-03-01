@@ -2,7 +2,7 @@ import { getRecordingConnections } from '@/lib/data-service'
 import { KnowledgeGraph } from '@/components/knowledge-graph'
 import { RecordingHeader } from '@/components/recording-header'
 import { SpotifyEmbed } from '@/components/spotify-embed'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'

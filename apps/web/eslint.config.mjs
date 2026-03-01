@@ -26,6 +26,7 @@ const eslintConfig = [
       "src/lib/spotify.ts",
       "src/lib/data-service.ts",
       "src/components/search-results.tsx",
+      "src/components/search-bar.tsx",
       "src/components/recording-header.tsx",
       "src/app/recording/*/page.tsx",
       "src/app/artist/*/page.tsx",
