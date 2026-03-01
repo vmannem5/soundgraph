@@ -389,6 +389,21 @@ export async function getRecordingConnections(mbid: string) {
     }
   }
 
+  // Add RecordingTag entries as genre connections
+  if (dbRecording) {
+    const tagConnections = (dbRecording.tags || [])
+      .slice(0, 10)
+      .map((rt: { tag: string; count: number }) => ({
+        type: 'genre' as const,
+        label: rt.tag,
+        targetType: 'tag' as const,
+        targetId: rt.tag,
+        targetName: rt.tag,
+        importance: rt.count,
+      }))
+    connections.push(...tagConnections)
+  }
+
   // === API connections (from MusicBrainz relations) ===
   const dbConnectionIds = new Set(connections.map(c => `${c.targetId}-${c.type}`))
 
