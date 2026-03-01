@@ -367,6 +367,17 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
                     targetName: s.artist_name ? `${s.rec_title} (${s.artist_name})` : s.rec_title,
                     importance: s.popularity || 1,
                   })),
+                  ...allGenres.slice(0, 12).map((g) => {
+                    const tagEntry = artist.tags?.find((t: { name: string; count: number }) => t.name === g)
+                    return {
+                      type: 'genre' as const,
+                      label: g,
+                      targetType: 'tag' as const,
+                      targetId: g,
+                      targetName: g,
+                      importance: tagEntry?.count || 1,
+                    }
+                  }),
                 ]}
               />
             </section>
