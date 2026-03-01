@@ -17,8 +17,9 @@ import '@xyflow/react/dist/style.css'
 
 // Connection group definitions — inspired by sample-focused music graph
 const CONNECTION_GROUPS: Record<string, { label: string; color: string; borderColor: string; order: number }> = {
-  sample: { label: 'SAMPLES', color: '#ef4444', borderColor: '#dc2626', order: 0 },
-  'samples from': { label: 'SAMPLES', color: '#ef4444', borderColor: '#dc2626', order: 0 },
+  'samples material': { label: 'SAMPLES FROM', color: '#ef4444', borderColor: '#dc2626', order: 0 },
+  sample: { label: 'SAMPLES FROM', color: '#ef4444', borderColor: '#dc2626', order: 0 },
+  'samples from': { label: 'SAMPLES FROM', color: '#ef4444', borderColor: '#dc2626', order: 0 },
   'sampled by': { label: 'SAMPLED BY', color: '#f97316', borderColor: '#ea580c', order: 1 },
   producer: { label: 'CREDITS', color: '#f59e0b', borderColor: '#d97706', order: 2 },
   composer: { label: 'CREDITS', color: '#ec4899', borderColor: '#db2777', order: 2 },
@@ -167,8 +168,9 @@ function buildGraphData(
       const y = Math.sin(nodeAngle) * radius
 
       const isSample = conn.targetType === 'recording'
-      const nodeSize = isSample ? '90px' : '70px'
-      const borderRadius = isSample ? '50%' : '24px'
+      const isSampledBy = conn.type === 'sampled by'
+      const nodeSize = isSample ? '100px' : '70px'
+      const borderRadius = isSample ? '16px' : '24px'
 
       nodes.push({
         id: nodeId,
@@ -192,15 +194,20 @@ function buildGraphData(
         },
       })
 
+      // Clear directional labels for sample connections
+      const edgeLabel = isSample
+        ? (isSampledBy ? 'sampled by' : 'samples from')
+        : conn.type
+
       edges.push({
         id: `edge-${recording.id}-${conn.targetId}-${conn.type}-${i}`,
         source: `recording-${recording.id}`,
         target: nodeId,
-        label: conn.type,
+        label: edgeLabel,
         labelStyle: {
-          fontSize: '9px',
-          fill: '#9ca3af',
-          fontWeight: '400',
+          fontSize: isSample ? '10px' : '9px',
+          fill: isSample ? '#fbbf24' : '#9ca3af',
+          fontWeight: isSample ? '600' : '400',
         },
         labelBgStyle: {
           fill: 'rgba(0,0,0,0.6)',
@@ -210,8 +217,8 @@ function buildGraphData(
         labelShowBg: true,
         style: {
           stroke: info.color,
-          strokeWidth: 1.5,
-          opacity: 0.6,
+          strokeWidth: isSample ? 2.5 : 1.5,
+          opacity: isSample ? 0.9 : 0.6,
         },
         markerEnd: {
           type: MarkerType.ArrowClosed,

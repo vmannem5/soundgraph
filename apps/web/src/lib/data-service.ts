@@ -37,69 +37,120 @@ async function setCache(key: string, data: Prisma.InputJsonValue, source: string
 // === Public API ===
 
 export async function searchAll(query: string) {
-  // Try DB search first
+  const MIN_DB_RESULTS = 3
+
+  const sanitized = query.trim().replace(/[^\w\s]/g, '').trim()
+  if (!sanitized) {
+    return { artists: [], recordings: [], spotifyTracks: [], spotifyArtists: [] }
+  }
+
+  // Full-text search: "miles davis" => "miles:* & davis:*" (prefix match with AND)
+  const tsQuery = sanitized.split(/\s+/).map(t => `${t}:*`).join(' & ')
+
+  // Fast GIN-indexed full-text search on DB
   const [dbArtists, dbRecordings] = await Promise.all([
-    prisma.artist.findMany({
-      where: { name: { contains: query, mode: 'insensitive' } },
-      take: 5,
-      include: { tags: { take: 5 } },
-    }).catch(() => []),
-    prisma.recording.findMany({
-      where: { title: { contains: query, mode: 'insensitive' } },
-      take: 5,
-      include: {
-        credits: { include: { artist: true }, where: { role: 'performer' }, take: 3 },
-        tags: { take: 5 },
-      },
-    }).catch(() => []),
+    prisma.$queryRaw<Array<{
+      id: string; mbid: string; name: string; type: string | null
+      country: string | null; disambiguation: string | null; rank: number
+    }>>`
+      SELECT id, mbid, name, type, country, disambiguation,
+             ts_rank("search_vector", to_tsquery('english', ${tsQuery})) AS rank
+      FROM "Artist"
+      WHERE "search_vector" @@ to_tsquery('english', ${tsQuery})
+      ORDER BY rank DESC
+      LIMIT 10
+    `.catch(() => []),
+
+    prisma.$queryRaw<Array<{
+      id: string; mbid: string; title: string; length: number | null; rank: number
+    }>>`
+      SELECT id, mbid, title, length,
+             ts_rank("search_vector", to_tsquery('english', ${tsQuery})) AS rank
+      FROM "Recording"
+      WHERE "search_vector" @@ to_tsquery('english', ${tsQuery})
+      ORDER BY rank DESC
+      LIMIT 10
+    `.catch(() => []),
   ])
 
-  // Also fetch from APIs for broader results
-  const [mbArtists, mbRecordings, spotifyResults] = await Promise.all([
-    mb.searchArtists(query, 5).catch(() => null),
-    mb.searchRecordings(query, 5).catch(() => null),
-    spotify.searchSpotify(query, 'track,artist', 5).catch(() => null),
-  ])
+  // Trigram fallback for typos when full-text returns too few results
+  let allArtists = dbArtists
+  let allRecordings = dbRecordings
+  if (dbArtists.length < MIN_DB_RESULTS || dbRecordings.length < MIN_DB_RESULTS) {
+    const existingArtistMbids = new Set(dbArtists.map(a => a.mbid))
+    const existingRecMbids = new Set(dbRecordings.map(r => r.mbid))
+    const [trgArtists, trgRecordings] = await Promise.all([
+      dbArtists.length < MIN_DB_RESULTS
+        ? prisma.$queryRaw<typeof dbArtists>`
+            SELECT id, mbid, name, type, country, disambiguation,
+                   similarity(name, ${sanitized}) AS rank
+            FROM "Artist" WHERE name % ${sanitized}
+            ORDER BY rank DESC LIMIT 5
+          `.catch(() => [])
+        : Promise.resolve([] as typeof dbArtists),
+      dbRecordings.length < MIN_DB_RESULTS
+        ? prisma.$queryRaw<typeof dbRecordings>`
+            SELECT id, mbid, title, length,
+                   similarity(title, ${sanitized}) AS rank
+            FROM "Recording" WHERE title % ${sanitized}
+            ORDER BY rank DESC LIMIT 5
+          `.catch(() => [])
+        : Promise.resolve([] as typeof dbRecordings),
+    ])
+    allArtists = [...dbArtists, ...trgArtists.filter(a => !existingArtistMbids.has(a.mbid))]
+    allRecordings = [...dbRecordings, ...trgRecordings.filter(r => !existingRecMbids.has(r.mbid))]
+  }
 
-  // Merge DB artists into MB format for compatibility
-  const dbArtistsMapped = dbArtists.map(a => ({
-    id: a.mbid,
-    name: a.name,
-    type: a.type,
-    country: a.country,
-    disambiguation: a.disambiguation,
+  // Batch-fetch performer credits for matched recordings
+  const creditsByRecId = new Map<string, Array<{ artist: { mbid: string; name: string } }>>()
+  if (allRecordings.length > 0) {
+    const credits = await prisma.credit.findMany({
+      where: { recordingId: { in: allRecordings.map(r => r.id) }, role: 'performer' },
+      include: { artist: { select: { mbid: true, name: true } } },
+    }).catch(() => [])
+    for (const c of credits) {
+      const arr = creditsByRecId.get(c.recordingId) || []
+      arr.push(c)
+      creditsByRecId.set(c.recordingId, arr)
+    }
+  }
+
+  // Map to existing output format
+  const dbArtistsMapped = allArtists.map(a => ({
+    id: a.mbid, name: a.name, type: a.type, country: a.country,
+    disambiguation: a.disambiguation, _fromDb: true,
+  }))
+  const dbRecordingsMapped = allRecordings.map(r => ({
+    id: r.mbid, title: r.title, length: r.length,
+    'artist-credit': (creditsByRecId.get(r.id) || []).map(c => ({
+      name: c.artist.name, artist: { id: c.artist.mbid, name: c.artist.name },
+    })),
     _fromDb: true,
   }))
 
-  // Merge DB recordings into MB format
-  const dbRecordingsMapped = dbRecordings.map(r => ({
-    id: r.mbid,
-    title: r.title,
-    length: r.length,
-    'artist-credit': r.credits.map(c => ({ name: c.artist.name, artist: { id: c.artist.mbid, name: c.artist.name } })),
-    _fromDb: true,
-  }))
+  // Only call external APIs if DB results are sparse
+  const needApi = allArtists.length < MIN_DB_RESULTS || allRecordings.length < MIN_DB_RESULTS
+  let mbArtistsList: any[] = []
+  let mbRecordingsList: any[] = []
+  let spotifyResults: any = null
 
-  // Deduplicate: prefer DB results, add API results that aren't in DB
-  const mbArtistsList = (mbArtists?.artists as any[]) || []
-  const mbRecordingsList = (mbRecordings?.recordings as any[]) || []
+  if (needApi) {
+    const [mbA, mbR, spRes] = await Promise.all([
+      allArtists.length < MIN_DB_RESULTS ? mb.searchArtists(query, 5).catch(() => null) : null,
+      allRecordings.length < MIN_DB_RESULTS ? mb.searchRecordings(query, 5).catch(() => null) : null,
+      spotify.searchSpotify(query, 'track,artist', 5).catch(() => null),
+    ])
+    mbArtistsList = (mbA?.artists as any[]) || []
+    mbRecordingsList = (mbR?.recordings as any[]) || []
+    spotifyResults = spRes
+  }
 
-  const dbArtistMbids = new Set(dbArtists.map(a => a.mbid))
-  const dbRecordingMbids = new Set(dbRecordings.map(r => r.mbid))
-
-  const mergedArtists = [
-    ...dbArtistsMapped,
-    ...mbArtistsList.filter((a: any) => !dbArtistMbids.has(a.id)),
-  ].slice(0, 10)
-
-  const mergedRecordings = [
-    ...dbRecordingsMapped,
-    ...mbRecordingsList.filter((r: any) => !dbRecordingMbids.has(r.id)),
-  ].slice(0, 10)
+  const dbArtistMbids = new Set(allArtists.map(a => a.mbid))
+  const dbRecordingMbids = new Set(allRecordings.map(r => r.mbid))
 
   return {
-    artists: mergedArtists,
-    recordings: mergedRecordings,
+    artists: [...dbArtistsMapped, ...mbArtistsList.filter((a: any) => !dbArtistMbids.has(a.id))].slice(0, 10),
+    recordings: [...dbRecordingsMapped, ...mbRecordingsList.filter((r: any) => !dbRecordingMbids.has(r.id))].slice(0, 10),
     spotifyTracks: spotifyResults?.tracks?.items || [],
     spotifyArtists: spotifyResults?.artists?.items || [],
   }
