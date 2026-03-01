@@ -30,6 +30,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# worktrees
+.worktrees/
+
 # session exports
 *.txt
 !README.txt
