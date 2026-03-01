@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ReactFlow,
@@ -266,6 +266,9 @@ function buildGraphData(
 
 export function KnowledgeGraph({ recording, connections }: KnowledgeGraphProps) {
   const router = useRouter()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
   const { nodes: initialNodes, edges: initialEdges } = useMemo(
     () => buildGraphData(recording, connections),
     [recording, connections]
@@ -279,6 +282,12 @@ export function KnowledgeGraph({ recording, connections }: KnowledgeGraphProps) 
     if (targetType === 'artist') router.push(`/artist/${targetId}`)
     else if (targetType === 'recording') router.push(`/recording/${targetId}`)
   }, [router])
+
+  if (!mounted) {
+    return (
+      <div className="w-full h-[500px] sm:h-[650px] md:h-[800px] rounded-xl border border-white/5 animate-pulse" style={{ background: '#0c0c10' }} />
+    )
+  }
 
   if (connections.length === 0) {
     return (
