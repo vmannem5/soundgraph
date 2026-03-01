@@ -36,10 +36,10 @@ interface LeafData {
 // ── Category config ────────────────────────────────────────────────────────
 
 const CAT = {
-  SAMPLES_FROM: { label: 'Samples From', color: '#c4956a', bg: 'rgba(196,149,106,0.14)' },
-  SAMPLED_BY:   { label: 'Sampled By',   color: '#8b9cc4', bg: 'rgba(139,156,196,0.14)' },
-  CREDITS:      { label: 'Credits',       color: '#d6d3d1', bg: 'rgba(214,211,209,0.07)' },
-  PERFORMERS:   { label: 'Performers',    color: '#a3a3a3', bg: 'rgba(163,163,163,0.07)' },
+  SAMPLES_FROM: { label: 'Samples From', color: '#e8974a', bg: 'rgba(232,151,74,0.22)'  },
+  SAMPLED_BY:   { label: 'Sampled By',   color: '#6b9ae8', bg: 'rgba(107,154,232,0.22)' },
+  CREDITS:      { label: 'Credits',      color: '#7cc4a8', bg: 'rgba(124,196,168,0.18)' },
+  PERFORMERS:   { label: 'Performers',   color: '#b87dc4', bg: 'rgba(184,125,196,0.18)' },
 } as const
 
 const CAT_ORDER = ['SAMPLES_FROM', 'SAMPLED_BY', 'CREDITS', 'PERFORMERS'] as const
@@ -204,12 +204,10 @@ export function ConnectionBubbles({ connections }: { connections: Connection[] }
               {/* Category ring */}
               <circle
                 cx={cx} cy={cy} r={r}
-                fill={isExpanded
-                  ? cat.bg.replace('0.14', '0.04').replace('0.07', '0.02')
-                  : cat.bg}
+                fill={isExpanded ? 'rgba(0,0,0,0.15)' : cat.bg}
                 stroke={cat.color}
-                strokeWidth={isExpanded ? 1.5 : 1.2}
-                strokeOpacity={isExpanded ? 0.7 : 0.45}
+                strokeWidth={isExpanded ? 1.5 : 1.5}
+                strokeOpacity={isExpanded ? 0.9 : 0.75}
               />
 
               {/* Category label — top of circle when expanded, center when collapsed */}
@@ -284,8 +282,8 @@ export function ConnectionBubbles({ connections }: { connections: Connection[] }
                       cx={lx} cy={ly} r={lr}
                       fill={cat.bg}
                       stroke={cat.color}
-                      strokeWidth={0.75}
-                      strokeOpacity={0.6}
+                      strokeWidth={1.2}
+                      strokeOpacity={0.85}
                     />
                     {showText && (
                       <text
@@ -329,6 +327,26 @@ export function ConnectionBubbles({ connections }: { connections: Connection[] }
           </g>
         )}
       </svg>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-5 gap-y-1.5 justify-center px-4 pb-4 pt-1">
+        {categories.map((cat) => (
+          <div key={cat.id} className="flex items-center gap-1.5">
+            <span
+              className="inline-block rounded-full shrink-0"
+              style={{
+                width: 10, height: 10,
+                background: cat.bg,
+                border: `1.5px solid ${cat.color}`,
+                opacity: 0.95,
+              }}
+            />
+            <span className="text-xs font-medium" style={{ color: cat.color, opacity: 0.85 }}>
+              {cat.label}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
