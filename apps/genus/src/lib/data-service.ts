@@ -152,7 +152,7 @@ export async function getSpecimenDetail(mbid: string): Promise<SpecimenDetail | 
     type: r.type,
     primaryFamily,
     primaryFamilySlug,
-    lineage,
+    lineage: [],  // not fetched for related specimens
   }))
 
   return {
@@ -185,11 +185,12 @@ export async function getSpecimenDetail(mbid: string): Promise<SpecimenDetail | 
 export async function searchSpecimens(query: string): Promise<SpecimenSummary[]> {
   if (!query.trim()) return []
 
+  const pattern = `%${query.trim()}%`
   const artists = await prisma.$queryRaw<Array<{ mbid: string; name: string; country: string | null; type: string | null }>>`
     SELECT a.mbid, a.name, a.country, a.type
     FROM "Artist" a
     JOIN "SpecimenClassification" sc ON sc."entityMbid" = a.mbid AND sc."entityType" = 'artist'
-    WHERE a.name ILIKE ${'%' + query.trim() + '%'}
+    WHERE a.name ILIKE ${pattern}
     GROUP BY a.mbid, a.name, a.country, a.type
     ORDER BY a.popularity DESC NULLS LAST
     LIMIT 12
@@ -220,33 +221,33 @@ export async function searchSpecimens(query: string): Promise<SpecimenSummary[]>
 }
 
 export async function getFeaturedSpecimens(): Promise<SpecimenSummary[]> {
-  const families = await prisma.genreTaxonomy.findMany({
-    where: { level: 'family' },
-    orderBy: { specimenCount: 'desc' },
-  }).catch(() => [])
+  const rows = await prisma.$queryRaw<Array<{
+    famId: string
+    mbid: string
+    name: string
+    country: string | null
+    type: string | null
+    famName: string
+    famSlug: string
+  }>>`
+    SELECT DISTINCT ON (sc."taxonomyId")
+      sc."taxonomyId" AS "famId",
+      a.mbid, a.name, a.country, a.type,
+      gt.name AS "famName", gt.slug AS "famSlug"
+    FROM "SpecimenClassification" sc
+    JOIN "Artist" a ON a.mbid = sc."entityMbid"
+    JOIN "GenreTaxonomy" gt ON gt.id = sc."taxonomyId" AND gt.level = 'family'
+    WHERE sc."entityType" = 'artist'
+    ORDER BY sc."taxonomyId", a.popularity DESC NULLS LAST
+  `.catch(() => [])
 
-  const specimens: SpecimenSummary[] = []
-  for (const fam of families) {
-    const top = await prisma.$queryRaw<Array<{ mbid: string; name: string; country: string | null; type: string | null }>>`
-      SELECT a.mbid, a.name, a.country, a.type
-      FROM "SpecimenClassification" sc
-      JOIN "Artist" a ON a.mbid = sc."entityMbid"
-      WHERE sc."taxonomyId" = ${fam.id}
-        AND sc."entityType" = 'artist'
-      ORDER BY a.popularity DESC NULLS LAST
-      LIMIT 1
-    `.catch(() => [])
-    if (top[0]) {
-      specimens.push({
-        mbid: top[0].mbid,
-        name: top[0].name,
-        country: top[0].country,
-        type: top[0].type,
-        primaryFamily: fam.name,
-        primaryFamilySlug: fam.slug,
-        lineage: [fam.name],
-      })
-    }
-  }
-  return specimens
+  return rows.map(r => ({
+    mbid: r.mbid,
+    name: r.name,
+    country: r.country,
+    type: r.type,
+    primaryFamily: r.famName,
+    primaryFamilySlug: r.famSlug,
+    lineage: [r.famName],
+  }))
 }
