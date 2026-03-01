@@ -580,3 +580,138 @@ export async function getDiscoveryData() {
     return { mostSampled: [], topProducers: [] }
   }
 }
+
+export interface GenreYearEntry {
+  year: number
+  tag: string
+  total_count: number
+}
+
+export async function getArtistGenreTimeline(mbid: string): Promise<GenreYearEntry[]> {
+  try {
+    const rows = await prisma.$queryRaw<GenreYearEntry[]>`
+      SELECT
+        EXTRACT(YEAR FROM rg."firstReleaseDate"::date)::int AS year,
+        rgt.tag,
+        SUM(rgt.count)::int AS total_count
+      FROM "Artist" a
+      JOIN "Credit" c ON c."artistId" = a.id
+      JOIN "ReleaseRecording" rr ON rr."recordingId" = c."recordingId"
+      JOIN "Release" rel ON rel.id = rr."releaseId"
+      JOIN "ReleaseGroup" rg ON rg.id = rel."releaseGroupId"
+      JOIN "ReleaseGroupTag" rgt ON rgt."releaseGroupId" = rg.id
+      WHERE a.mbid = ${mbid}
+        AND rg."firstReleaseDate" IS NOT NULL
+        AND rg."firstReleaseDate" != ''
+        AND rg."firstReleaseDate" ~ '^[0-9]{4}'
+      GROUP BY year, rgt.tag
+      HAVING SUM(rgt.count) > 0
+      ORDER BY year, total_count DESC
+    `
+    return rows
+  } catch {
+    return []
+  }
+}
+
+export interface SampleNode {
+  mbid: string
+  title: string
+  artistName: string | null
+  year: string | null
+  children: SampleNode[]
+}
+
+export async function getRecordingSampleChain(mbid: string): Promise<SampleNode[]> {
+  try {
+    // Level 1: direct samples of this recording
+    const level1 = await prisma.sampleRelation.findMany({
+      where: { samplingTrack: { mbid } },
+      include: {
+        sampledTrack: {
+          include: {
+            credits: {
+              where: { role: 'performer' },
+              take: 1,
+              include: { artist: { select: { name: true } } },
+            },
+            releases: {
+              take: 1,
+              include: {
+                release: {
+                  include: {
+                    releaseGroup: { select: { firstReleaseDate: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      take: 5,
+    })
+
+    if (!level1.length) return []
+
+    // Level 2: what each level-1 track samples
+    const level2Map = new Map<string, SampleNode[]>()
+    await Promise.all(
+      level1.map(async (rel) => {
+        const l2 = await prisma.sampleRelation.findMany({
+          where: { samplingTrack: { id: rel.sampledTrackId } },
+          include: {
+            sampledTrack: {
+              include: {
+                credits: {
+                  where: { role: 'performer' },
+                  take: 1,
+                  include: { artist: { select: { name: true } } },
+                },
+                releases: {
+                  take: 1,
+                  include: {
+                    release: {
+                      include: {
+                        releaseGroup: { select: { firstReleaseDate: true } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          take: 3,
+        })
+        level2Map.set(
+          rel.sampledTrackId,
+          l2.map(r => nodeFromRelation(r))
+        )
+      })
+    )
+
+    return level1.map(rel => ({
+      ...nodeFromRelation(rel),
+      children: level2Map.get(rel.sampledTrackId) || [],
+    }))
+  } catch {
+    return []
+  }
+}
+
+// Helper: extract display fields from a SampleRelation include
+function nodeFromRelation(rel: {
+  sampledTrack: {
+    mbid: string
+    title: string
+    credits: Array<{ artist: { name: string } }>
+    releases: Array<{
+      release: { releaseGroup: { firstReleaseDate: string | null } | null } | null
+    }>
+  }
+}): SampleNode {
+  const track = rel.sampledTrack
+  const artistName = track.credits[0]?.artist.name ?? null
+  const rawDate = track.releases[0]?.release?.releaseGroup?.firstReleaseDate ?? null
+  const year = rawDate ? rawDate.slice(0, 4) : null
+  return { mbid: track.mbid, title: track.title, artistName, year, children: [] }
+}
