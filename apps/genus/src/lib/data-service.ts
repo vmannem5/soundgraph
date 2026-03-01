@@ -17,12 +17,14 @@ export interface SpecimenSummary {
   name: string
   country: string | null
   type: string | null
+  imageUrl?: string | null
   primaryFamily: string | null
   primaryFamilySlug: string | null
   lineage: string[]
 }
 
 export interface SpecimenDetail extends SpecimenSummary {
+  imageUrl: string | null
   tags: Array<{ tag: string; count: number }>
   soundProfile: {
     genreBreadth: number
@@ -172,6 +174,7 @@ export async function getSpecimenDetail(mbid: string): Promise<SpecimenDetail | 
   return {
     mbid: artist.mbid,
     name: artist.name,
+    imageUrl: artist.imageUrl ?? null,
     country: artist.country ?? null,
     type: artist.type ?? null,
     primaryFamily,
@@ -212,12 +215,10 @@ export async function searchSpecimens(query: string): Promise<SpecimenSummary[]>
   if (!query.trim()) return []
 
   const pattern = `%${query.trim()}%`
-  const artists = await prisma.$queryRaw<Array<{ mbid: string; name: string; country: string | null; type: string | null }>>`
-    SELECT a.mbid, a.name, a.country, a.type
+  const artists = await prisma.$queryRaw<Array<{ mbid: string; name: string; country: string | null; type: string | null; imageUrl: string | null }>>`
+    SELECT a.mbid, a.name, a.country, a.type, a."imageUrl"
     FROM "Artist" a
-    JOIN "SpecimenClassification" sc ON sc."entityMbid" = a.mbid AND sc."entityType" = 'artist'
     WHERE a.name ILIKE ${pattern}
-    GROUP BY a.mbid, a.name, a.country, a.type
     ORDER BY a.popularity DESC NULLS LAST
     LIMIT 12
   `.catch(() => [])
@@ -240,6 +241,7 @@ export async function searchSpecimens(query: string): Promise<SpecimenSummary[]>
     name: a.name,
     country: a.country,
     type: a.type,
+    imageUrl: a.imageUrl ?? null,
     primaryFamily: familyMap.get(a.mbid)?.name ?? null,
     primaryFamilySlug: familyMap.get(a.mbid)?.slug ?? null,
     lineage: familyMap.get(a.mbid) ? [familyMap.get(a.mbid)!.name] : [],

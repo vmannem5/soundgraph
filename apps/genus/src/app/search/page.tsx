@@ -43,17 +43,22 @@ export default async function SearchPage({ searchParams }: Props) {
             {results.length} result{results.length !== 1 ? 's' : ''} for &ldquo;{query}&rdquo;
           </div>
           {results.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No classified specimens found.</p>
+            <p className="text-muted-foreground text-sm">No artists found.</p>
           ) : (
             <div className="space-y-1">
               {results.map(spec => (
                 <Link
                   key={spec.mbid}
                   href={`/specimen/${spec.mbid}`}
-                  className="flex items-center justify-between rounded-lg px-4 py-3 border border-border hover:bg-accent transition-colors group"
+                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 border border-border hover:bg-accent transition-colors group"
                 >
-                  <div>
-                    <div className="font-medium group-hover:text-primary transition-colors">{spec.name}</div>
+                  <div className="w-10 h-10 rounded-full shrink-0 overflow-hidden bg-muted">
+                    {spec.imageUrl && (
+                      <img src={spec.imageUrl} alt={spec.name} className="w-full h-full object-cover" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium group-hover:text-primary transition-colors truncate">{spec.name}</div>
                     {spec.lineage.length > 0 && (
                       <div className="text-xs text-muted-foreground mt-0.5">{spec.lineage.join(' › ')}</div>
                     )}

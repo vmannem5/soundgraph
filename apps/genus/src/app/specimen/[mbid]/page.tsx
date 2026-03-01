@@ -38,32 +38,52 @@ export default async function SpecimenPage({ params }: Props) {
   }
 
   return (
-    <main className="max-w-5xl mx-auto px-6 py-10 space-y-10">
-      {/* Breadcrumb */}
-      <nav className="text-sm text-muted-foreground flex items-center gap-1.5 flex-wrap">
-        <Link href="/" className="hover:text-foreground">GENUS</Link>
-        {specimen.lineage.map((segment, i) => (
-          <span key={i} className="flex items-center gap-1.5">
-            <span>›</span>
-            <span className="text-foreground/70">{segment}</span>
-          </span>
-        ))}
-        <span>›</span>
-        <span className="font-semibold text-foreground">{specimen.name}</span>
-      </nav>
+    <main className="min-h-screen">
+      {/* Hero */}
+      <div className="relative w-full overflow-hidden" style={{ minHeight: '220px' }}>
+        {specimen.imageUrl ? (
+          <>
+            <img
+              src={specimen.imageUrl}
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{ filter: 'blur(40px)', transform: 'scale(1.15)', opacity: 0.35 }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/60 to-background" />
+          </>
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-b from-neutral-900 to-background" />
+        )}
+        <div className="relative z-10 max-w-5xl mx-auto px-6 pt-6 pb-8 flex items-end gap-6">
+          {/* Artist photo */}
+          {specimen.imageUrl && (
+            <div className="shrink-0 rounded-full overflow-hidden ring-4 ring-white/20 shadow-2xl bg-neutral-800" style={{ width: 100, height: 100 }}>
+              <img src={specimen.imageUrl} alt={specimen.name} className="w-full h-full object-cover" />
+            </div>
+          )}
+          <div className="flex flex-col gap-1 pb-1">
+            <nav className="text-sm text-white/60 flex items-center gap-1.5 flex-wrap">
+              <Link href="/" className="hover:text-white">GENUS</Link>
+              {specimen.lineage.map((segment, i) => (
+                <span key={i} className="flex items-center gap-1.5">
+                  <span>›</span>
+                  <span className="text-white/50">{segment}</span>
+                </span>
+              ))}
+            </nav>
+            <h1 className="text-4xl font-black text-white drop-shadow-lg">{specimen.name}</h1>
+            {specimen.type && <div className="text-sm text-white/60">{specimen.type}{specimen.country ? ` · ${specimen.country}` : ''}</div>}
+          </div>
+        </div>
+      </div>
 
+      <div className="max-w-5xl mx-auto px-6 py-8 space-y-10">
       {/* 3-column layout */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
 
         {/* Left: Classification */}
         <aside className="space-y-6">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Specimen</div>
-            <h1 className="text-3xl font-black" style={{ color: 'var(--genus-gold)' }}>{specimen.name}</h1>
-            {specimen.type && <div className="text-sm text-muted-foreground mt-1">{specimen.type}</div>}
-            {specimen.country && <div className="text-xs text-muted-foreground">{specimen.country}</div>}
-          </div>
-
           {specimen.classifications.length > 0 && (
             <div className="space-y-2">
               <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Lineage</div>
@@ -216,6 +236,47 @@ export default async function SpecimenPage({ params }: Props) {
           </div>
         </div>
       )}
+
+      {/* Album art — Cover Art Archive */}
+      <AlbumCovers mbid={mbid} />
+
+      </div>
     </main>
+  )
+}
+
+async function AlbumCovers({ mbid }: { mbid: string }) {
+  // Fetch release groups from MusicBrainz
+  const rgs = await fetch(
+    `https://musicbrainz.org/ws/2/release-group?artist=${mbid}&limit=8&fmt=json`,
+    { headers: { 'User-Agent': 'MusicGenus/0.1.0 (musicgenus.com)' }, next: { revalidate: 86400 } }
+  )
+    .then(r => r.ok ? r.json() : null)
+    .then(d => (d?.['release-groups'] ?? []) as Array<{ id: string; title: string; 'primary-type'?: string; 'first-release-date'?: string }>)
+    .catch(() => [])
+
+  if (!rgs.length) return null
+
+  return (
+    <div className="border-t border-border pt-8 space-y-4">
+      <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Discography</h2>
+      <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
+        {rgs.map(rg => (
+          <div key={rg.id} className="space-y-1">
+            <div className="aspect-square rounded-lg overflow-hidden bg-muted">
+              <img
+                src={`https://coverartarchive.org/release-group/${rg.id}/front-250`}
+                alt={rg.title}
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="text-xs font-medium truncate">{rg.title}</div>
+            {rg['first-release-date'] && (
+              <div className="text-xs text-muted-foreground">{rg['first-release-date'].slice(0, 4)}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
