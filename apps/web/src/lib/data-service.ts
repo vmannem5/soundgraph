@@ -480,7 +480,7 @@ export async function getArtistConnections(mbid: string) {
         LIMIT 8
       `.catch(() => []),
 
-      // Recordings this artist has sampled
+      // Recordings this artist has sampled (this artist = samplingTrack)
       prisma.$queryRaw<Array<{
         rec_mbid: string; rec_title: string
         artist_mbid: string | null; artist_name: string | null
@@ -490,8 +490,8 @@ export async function getArtistConnections(mbid: string) {
         FROM "Artist" a
         JOIN "Credit" c ON c."artistId" = a.id
         JOIN "Recording" r ON r.id = c."recordingId"
-        JOIN "SampleRelation" sr ON sr."recordingId" = r.id
-        JOIN "Recording" r_sampled ON r_sampled.id = sr."sampledRecordingId"
+        JOIN "SampleRelation" sr ON sr."samplingTrackId" = r.id
+        JOIN "Recording" r_sampled ON r_sampled.id = sr."sampledTrackId"
         LEFT JOIN "Credit" c_src ON c_src."recordingId" = r_sampled.id AND c_src.role = 'performer'
         LEFT JOIN "Artist" a_src ON a_src.id = c_src."artistId" AND a_src.mbid != ${mbid}
         WHERE a.mbid = ${mbid}
@@ -500,7 +500,7 @@ export async function getArtistConnections(mbid: string) {
         LIMIT 10
       `.catch(() => []),
 
-      // Recordings that sampled this artist's music
+      // Recordings that sampled this artist's music (this artist = sampledTrack)
       prisma.$queryRaw<Array<{
         rec_mbid: string; rec_title: string
         artist_mbid: string | null; artist_name: string | null
@@ -510,8 +510,8 @@ export async function getArtistConnections(mbid: string) {
         FROM "Artist" a
         JOIN "Credit" c ON c."artistId" = a.id
         JOIN "Recording" r ON r.id = c."recordingId"
-        JOIN "SampleRelation" sr ON sr."sampledRecordingId" = r.id
-        JOIN "Recording" r_sampling ON r_sampling.id = sr."recordingId"
+        JOIN "SampleRelation" sr ON sr."sampledTrackId" = r.id
+        JOIN "Recording" r_sampling ON r_sampling.id = sr."samplingTrackId"
         LEFT JOIN "Credit" c_dest ON c_dest."recordingId" = r_sampling.id AND c_dest.role = 'performer'
         LEFT JOIN "Artist" a_dest ON a_dest.id = c_dest."artistId" AND a_dest.mbid != ${mbid}
         WHERE a.mbid = ${mbid}
@@ -532,11 +532,11 @@ export async function getDiscoveryData() {
       prisma.$queryRaw<Array<{
         mbid: string; title: string; sample_count: number
       }>>`
-        SELECT r.mbid, r.title,
-          (SELECT count(*)::int FROM "SampleRelation" WHERE "sampledRecordingId" = r.id) as sample_count
+        SELECT r.mbid, r.title, count(sr.id)::int as sample_count
         FROM "Recording" r
-        WHERE EXISTS (SELECT 1 FROM "SampleRelation" WHERE "sampledRecordingId" = r.id)
-          AND r.popularity > 20
+        JOIN "SampleRelation" sr ON sr."sampledTrackId" = r.id
+        WHERE r.popularity > 20
+        GROUP BY r.id, r.mbid, r.title
         ORDER BY sample_count DESC, r.popularity DESC
         LIMIT 20
       `,

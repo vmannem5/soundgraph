@@ -102,7 +102,10 @@ export function SearchBar() {
         setDropdownResults(null)
       }
     } finally {
-      setIsFetching(false)
+      // Only clear the spinner if this is still the active request
+      if (abortRef.current === controller) {
+        setIsFetching(false)
+      }
     }
   }, [])
 

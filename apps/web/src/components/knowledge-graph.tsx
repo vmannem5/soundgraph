@@ -178,7 +178,12 @@ function buildGraphData(
       },
     })
 
-    // Cap the nodes shown
+    // Cap the nodes shown — compute count once before the loop for uniform spacing
+    const nodesToPlace = Math.min(conns.filter(c => !addedNodeIds.has(`${c.targetType}-${c.targetId}`)).length, MAX_NODES_PER_GROUP)
+    const maxSpread = sectorAngle * 0.8
+    const angleStep = nodesToPlace > 1 ? maxSpread / (nodesToPlace - 1) : 0
+    const startAngle = baseAngle - maxSpread / 2
+
     let placedIdx = 0
     conns.forEach((conn) => {
       const nodeId = `${conn.targetType}-${conn.targetId}`
@@ -186,13 +191,7 @@ function buildGraphData(
       if (placedIdx >= MAX_NODES_PER_GROUP) return
       addedNodeIds.add(nodeId)
 
-      // Evenly distribute within sector
-      const nodesInSector = Math.min(conns.filter(c => !addedNodeIds.has(`${c.targetType}-${c.targetId}`) || placedIdx < MAX_NODES_PER_GROUP).length + placedIdx, MAX_NODES_PER_GROUP)
-      const maxSpread = sectorAngle * 0.8
-      const angleStep = nodesInSector > 1 ? maxSpread / (nodesInSector - 1) : 0
-      const startAngle = baseAngle - maxSpread / 2
-
-      const nodeAngle = nodesInSector > 1 ? startAngle + placedIdx * angleStep : baseAngle
+      const nodeAngle = nodesToPlace > 1 ? startAngle + placedIdx * angleStep : baseAngle
       const jitter = (placedIdx % 3 - 1) * 35
       const radius = ringRadius + jitter
 
