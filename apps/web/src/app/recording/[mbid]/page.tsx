@@ -1,11 +1,6 @@
 import { getRecordingConnections } from '@/lib/data-service'
-import dynamic from 'next/dynamic'
+import { KnowledgeGraphClient as KnowledgeGraph } from '@/components/knowledge-graph-client'
 import { RecordingHeader } from '@/components/recording-header'
-
-const KnowledgeGraph = dynamic(
-  () => import('@/components/knowledge-graph').then(m => ({ default: m.KnowledgeGraph })),
-  { ssr: false }
-)
 import { SpotifyEmbed } from '@/components/spotify-embed'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
