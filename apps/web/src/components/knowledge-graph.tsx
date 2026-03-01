@@ -76,9 +76,13 @@ function buildGraphData(
   const albumArt = recording.spotifyData?.album?.images?.[1]?.url || recording.spotifyData?.album?.images?.[0]?.url
   const artistName = recording['artist-credit']?.map(c => c.name || c.artist?.name).join(', ') || ''
 
-  // Center node
+  // Track added node IDs — declared early so the center node can be registered
+  const addedNodeIds = new Set<string>()
+
+  // Center node — register its ID to prevent connection nodes colliding with it
+  const centerId = `recording-${recording.id}`
   nodes.push({
-    id: `recording-${recording.id}`,
+    id: centerId,
     position: { x: 0, y: 0 },
     data: {
       label: `${recording.title}\n${artistName}`,
@@ -104,6 +108,7 @@ function buildGraphData(
       lineHeight: '1.3',
     },
   })
+  addedNodeIds.add(centerId)
 
   // Cap nodes per group to prevent overcrowding
   const MAX_NODES_PER_GROUP = 8
@@ -119,10 +124,20 @@ function buildGraphData(
 
   const sortedGroups = [...grouped.entries()].sort((a, b) => a[1].info.ring - b[1].info.ring)
   const totalGroups = sortedGroups.length
-  const addedNodeIds = new Set<string>()
 
-  // Concentric ring radii — well-spaced for legibility
-  const RING_RADII = [280, 480, 680, 880, 1050]
+  // Adaptive ring radii — scale up when a ring has many nodes to prevent overlap
+  const nodesPerRing = new Map<number, number>()
+  sortedGroups.forEach(([, { info, conns }]) => {
+    const ring = info.ring
+    nodesPerRing.set(ring, (nodesPerRing.get(ring) || 0) + Math.min(conns.length, MAX_NODES_PER_GROUP))
+  })
+  const BASE_RADII = [300, 520, 740, 960, 1150]
+  const RING_RADII = BASE_RADII.map((base, i) => {
+    const count = nodesPerRing.get(i) || 0
+    // Each node needs roughly 180px of arc; radius = arc / angle
+    const minRadius = count > 1 ? Math.max(base, (count * 180) / (2 * Math.PI) + 80) : base
+    return minRadius
+  })
 
   // Subtle ring guides
   const usedRings = new Set(sortedGroups.map(([, { info }]) => info.ring))

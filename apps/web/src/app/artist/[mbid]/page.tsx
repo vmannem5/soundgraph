@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { GeneratedAvatar } from '@/lib/avatar'
 import { ReleaseGroupCover } from '@/components/release-group-cover'
 import { KnowledgeGraph } from '@/components/knowledge-graph'
+import { BackButton } from '@/components/back-button'
 import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
@@ -117,12 +118,7 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
 
         {/* Back link */}
         <div className="relative z-10 px-4 sm:px-8 pt-6">
-          <Link
-            href="/"
-            className="text-sm text-white/70 hover:text-white transition-colors"
-          >
-            &larr; Back to search
-          </Link>
+          <BackButton className="text-white/70 hover:text-white" />
         </div>
 
         {/* Hero content */}

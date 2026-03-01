@@ -2,6 +2,7 @@ import { getRecordingConnections } from '@/lib/data-service'
 import { KnowledgeGraph } from '@/components/knowledge-graph'
 import { RecordingHeader } from '@/components/recording-header'
 import { SpotifyEmbed } from '@/components/spotify-embed'
+import { BackButton } from '@/components/back-button'
 import { Card, CardContent } from '@/components/ui/card'
 import Link from 'next/link'
 
@@ -33,12 +34,7 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
 
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-8">
-      <Link
-        href="/"
-        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        &larr; Back to search
-      </Link>
+      <BackButton className="text-muted-foreground hover:text-foreground" />
 
       <RecordingHeader recording={recording} connections={connections} />
 
