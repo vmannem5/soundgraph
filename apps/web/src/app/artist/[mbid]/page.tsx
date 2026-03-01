@@ -54,10 +54,21 @@ function sortReleaseGroupsNewestFirst(rgs: any[]): any[] {
 export default async function ArtistPage({ params }: ArtistPageProps) {
   const { mbid } = await params
 
-  let artist: any
-  try {
-    artist = await getArtistDetails(mbid)
-  } catch {
+  // Run all three fetches in parallel — they're independent
+  const [artistResult, connectionsData, releaseGroupsResult] = await Promise.all([
+    getArtistDetails(mbid).catch((e: unknown) => e),
+    getArtistConnections(mbid),
+    (async () => {
+      try {
+        const rgs = await mb.getArtistReleaseGroups(mbid, 25)
+        return rgs['release-groups'] || []
+      } catch {
+        return await getArtistReleaseGroupsFromDb(mbid)
+      }
+    })(),
+  ])
+
+  if (artistResult instanceof Error) {
     return (
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-4">
         <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
@@ -71,18 +82,7 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
     )
   }
 
-  // Fetch connections (collaborators, producers, samples) in parallel with release groups
-  const [connectionsData, releaseGroupsResult] = await Promise.all([
-    getArtistConnections(mbid),
-    (async () => {
-      try {
-        const rgs = await mb.getArtistReleaseGroups(mbid, 25)
-        return rgs['release-groups'] || []
-      } catch {
-        return await getArtistReleaseGroupsFromDb(mbid)
-      }
-    })(),
-  ])
+  const artist = artistResult
   const { topCollaborators, topProducers, samplesFrom, sampledBy } = connectionsData
 
   // Sort newest first
