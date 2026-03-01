@@ -1,4 +1,5 @@
-import { getRecordingConnections } from '@/lib/data-service'
+import { getRecordingConnections, getRecordingSampleChain } from '@/lib/data-service'
+import { SampleChain } from '@/components/sample-chain'
 import { ConnectionBubbles } from '@/components/connection-bubbles'
 import { RecordingHeader } from '@/components/recording-header'
 import { SpotifyEmbed } from '@/components/spotify-embed'
@@ -15,7 +16,10 @@ interface RecordingPageProps {
 export default async function RecordingPage({ params }: RecordingPageProps) {
   const { mbid } = await params
 
-  const data = await getRecordingConnections(mbid)
+  const [data, sampleChain] = await Promise.all([
+    getRecordingConnections(mbid),
+    getRecordingSampleChain(mbid),
+  ])
   const recording = data.recording
   const connections = data.connections
 
@@ -134,6 +138,7 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
           </Card>
         </section>
       )}
+      <SampleChain roots={sampleChain} />
     </main>
   )
 }

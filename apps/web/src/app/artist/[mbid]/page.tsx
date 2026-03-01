@@ -1,4 +1,5 @@
-import { getArtistDetails, getArtistConnections } from '@/lib/data-service'
+import { getArtistDetails, getArtistConnections, getArtistGenreTimeline } from '@/lib/data-service'
+import { GenreHeatmap } from '@/components/genre-heatmap'
 import { prisma } from '@soundgraph/database'
 import * as mb from '@/lib/musicbrainz'
 import { Badge } from '@/components/ui/badge'
@@ -54,8 +55,8 @@ function sortReleaseGroupsNewestFirst(rgs: any[]): any[] {
 export default async function ArtistPage({ params }: ArtistPageProps) {
   const { mbid } = await params
 
-  // Run all three fetches in parallel — they're independent
-  const [artistResult, connectionsData, releaseGroupsResult] = await Promise.all([
+  // Run all fetches in parallel — they're independent
+  const [artistResult, connectionsData, releaseGroupsResult, genreTimeline] = await Promise.all([
     getArtistDetails(mbid).catch((e: unknown) => e),
     getArtistConnections(mbid),
     (async () => {
@@ -66,6 +67,7 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
         return await getArtistReleaseGroupsFromDb(mbid)
       }
     })(),
+    getArtistGenreTimeline(mbid),
   ])
 
   if (artistResult instanceof Error) {
@@ -211,6 +213,13 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
           <p className="text-muted-foreground text-sm py-4">No releases found.</p>
         )}
       </div>
+
+      {/* Sound Evolution heatmap */}
+      {genreTimeline.length > 0 && (
+        <div className="max-w-6xl mx-auto px-4 sm:px-8 py-4">
+          <GenreHeatmap data={genreTimeline} />
+        </div>
+      )}
 
       {/* Connections section */}
       {(topCollaborators.length > 0 || topProducers.length > 0 || samplesFrom.length > 0 || sampledBy.length > 0 || allGenres.length > 0) && (
