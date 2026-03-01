@@ -10,6 +10,12 @@ interface ReleaseGroupPageProps {
     params: Promise<{ id: string }>
 }
 
+function formatDuration(ms: number) {
+    const min = Math.floor(ms / 60000)
+    const sec = String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')
+    return `${min}:${sec}`
+}
+
 export default async function ReleaseGroupPage({ params }: ReleaseGroupPageProps) {
     const { id } = await params
 
@@ -17,7 +23,6 @@ export default async function ReleaseGroupPage({ params }: ReleaseGroupPageProps
     try {
         releaseGroup = await mb.getReleaseGroup(id)
     } catch {
-        // Retry once after a delay (MusicBrainz rate limit is 1 req/sec)
         try {
             await new Promise(r => setTimeout(r, 1500))
             releaseGroup = await mb.getReleaseGroup(id)
@@ -28,7 +33,7 @@ export default async function ReleaseGroupPage({ params }: ReleaseGroupPageProps
                         &larr; Back to search
                     </Link>
                     <p className="text-muted-foreground">
-                        Failed to load release group — MusicBrainz may be rate-limiting requests.{' '}
+                        Failed to load release group.{' '}
                         <a href={`/release-group/${id}`} className="underline hover:text-foreground">Try again</a>
                     </p>
                 </main>
@@ -40,8 +45,29 @@ export default async function ReleaseGroupPage({ params }: ReleaseGroupPageProps
         ?.map((c: any) => c.name || c.artist?.name)
         .join(', ') || 'Unknown Artist'
 
-    const releases = releaseGroup.releases || []
     const tags = releaseGroup.tags?.slice(0, 10) || []
+
+    // Fetch tracklist from the first official release (or any release)
+    const releases: any[] = releaseGroup.releases || []
+    const primaryRelease = releases.find((r: any) => r.status === 'Official') || releases[0]
+
+    let tracklist: any[] = []
+    if (primaryRelease?.id) {
+        try {
+            const releaseData = await mb.getRelease(primaryRelease.id)
+            // Flatten all tracks from all media
+            tracklist = (releaseData.media || []).flatMap((medium: any) =>
+                (medium.tracks || []).map((track: any) => ({
+                    ...track,
+                    position: track.position,
+                    discNumber: medium.position,
+                    totalDiscs: releaseData.media?.length || 1,
+                }))
+            )
+        } catch {
+            // Tracklist unavailable — show nothing
+        }
+    }
 
     return (
         <main className="max-w-4xl mx-auto px-4 py-8 space-y-8">
@@ -78,7 +104,52 @@ export default async function ReleaseGroupPage({ params }: ReleaseGroupPageProps
                 </CardContent>
             </Card>
 
-            {releases.length > 0 && (
+            {tracklist.length > 0 && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Tracklist ({tracklist.length})</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <div>
+                            {tracklist.map((track: any, i: number) => {
+                                const recording = track.recording || {}
+                                const mbid = recording.id
+                                const title = track.title || recording.title || 'Unknown'
+                                const length = track.length || recording.length
+                                return (
+                                    <div
+                                        key={track.id || i}
+                                        className={`flex items-center gap-4 px-4 py-3 ${i % 2 === 1 ? 'bg-white/[0.02]' : ''}`}
+                                    >
+                                        <span className="text-sm text-muted-foreground w-6 text-right shrink-0">
+                                            {track.position}
+                                        </span>
+                                        <div className="flex-1 min-w-0">
+                                            {mbid ? (
+                                                <Link
+                                                    href={`/recording/${mbid}`}
+                                                    className="font-medium hover:text-primary transition-colors truncate block"
+                                                >
+                                                    {title}
+                                                </Link>
+                                            ) : (
+                                                <span className="font-medium truncate block">{title}</span>
+                                            )}
+                                        </div>
+                                        {length && (
+                                            <span className="text-sm text-muted-foreground shrink-0">
+                                                {formatDuration(length)}
+                                            </span>
+                                        )}
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {tracklist.length === 0 && releases.length > 0 && (
                 <Card>
                     <CardHeader>
                         <CardTitle>Releases ({releases.length})</CardTitle>
@@ -97,11 +168,9 @@ export default async function ReleaseGroupPage({ params }: ReleaseGroupPageProps
                                             {release.country ? ` · ${release.country}` : ''}
                                         </p>
                                     </div>
-                                    <div className="flex gap-2">
-                                        {release.status && (
-                                            <Badge variant="outline" className="text-xs">{release.status}</Badge>
-                                        )}
-                                    </div>
+                                    {release.status && (
+                                        <Badge variant="outline" className="text-xs">{release.status}</Badge>
+                                    )}
                                 </div>
                             ))}
                         </div>
