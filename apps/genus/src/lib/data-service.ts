@@ -277,3 +277,62 @@ export async function getFeaturedSpecimens(): Promise<SpecimenSummary[]> {
     lineage: [r.famName],
   }))
 }
+
+// ── Hybrid data (SoundGraph artist connections) ────────────────────────────
+
+export interface HybridData {
+  collaborators: Array<{ mbid: string; name: string; count: number }>
+  samplesFrom: Array<{ mbid: string; title: string; artistName: string | null }>
+  sampledBy: Array<{ mbid: string; title: string; artistName: string | null }>
+}
+
+export async function getArtistHybridData(artistMbid: string): Promise<HybridData> {
+  const [collaborators, samplesFrom, sampledBy] = await Promise.all([
+    // Top collaborators by shared recording credit count
+    prisma.$queryRaw<Array<{ mbid: string; name: string; count: bigint }>>`
+      SELECT a2.mbid, a2.name, COUNT(*)::bigint AS count
+      FROM "Artist" a
+      JOIN "Credit" c1 ON c1."artistId" = a.id
+      JOIN "Credit" c2 ON c2."recordingId" = c1."recordingId" AND c2."artistId" != a.id
+      JOIN "Artist" a2 ON a2.id = c2."artistId"
+      WHERE a.mbid = ${artistMbid}
+      GROUP BY a2.mbid, a2.name
+      ORDER BY count DESC
+      LIMIT 8
+    `.catch(() => []),
+
+    // Tracks this artist's recordings sample
+    prisma.$queryRaw<Array<{ mbid: string; title: string; artistName: string | null }>>`
+      SELECT DISTINCT r2.mbid, r2.title, a2.name AS "artistName"
+      FROM "Artist" a
+      JOIN "Credit" c ON c."artistId" = a.id
+      JOIN "Recording" r ON r.id = c."recordingId"
+      JOIN "SampleRelation" sr ON sr."samplingTrackId" = r.id
+      JOIN "Recording" r2 ON r2.id = sr."sampledTrackId"
+      LEFT JOIN "Credit" c2 ON c2."recordingId" = r2.id
+      LEFT JOIN "Artist" a2 ON a2.id = c2."artistId"
+      WHERE a.mbid = ${artistMbid}
+      LIMIT 6
+    `.catch(() => []),
+
+    // Tracks that sample this artist's recordings
+    prisma.$queryRaw<Array<{ mbid: string; title: string; artistName: string | null }>>`
+      SELECT DISTINCT r2.mbid, r2.title, a2.name AS "artistName"
+      FROM "Artist" a
+      JOIN "Credit" c ON c."artistId" = a.id
+      JOIN "Recording" r ON r.id = c."recordingId"
+      JOIN "SampleRelation" sr ON sr."sampledTrackId" = r.id
+      JOIN "Recording" r2 ON r2.id = sr."samplingTrackId"
+      LEFT JOIN "Credit" c2 ON c2."recordingId" = r2.id
+      LEFT JOIN "Artist" a2 ON a2.id = c2."artistId"
+      WHERE a.mbid = ${artistMbid}
+      LIMIT 6
+    `.catch(() => []),
+  ])
+
+  return {
+    collaborators: collaborators.map(c => ({ mbid: c.mbid, name: c.name, count: Number(c.count) })),
+    samplesFrom,
+    sampledBy,
+  }
+}

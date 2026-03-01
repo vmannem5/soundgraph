@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getSpecimenDetail } from '@/lib/data-service'
+import { getSpecimenDetail, getArtistHybridData } from '@/lib/data-service'
 import { SoundProfileRadar } from '@/components/sound-profile-radar'
 
 export const dynamic = 'force-dynamic'
@@ -18,7 +18,10 @@ const LEVEL_LABELS: Record<string, string> = {
 
 export default async function SpecimenPage({ params }: Props) {
   const { mbid } = await params
-  const specimen = await getSpecimenDetail(mbid)
+  const [specimen, hybrid] = await Promise.all([
+    getSpecimenDetail(mbid),
+    getArtistHybridData(mbid),
+  ])
 
   if (!specimen) {
     return (
@@ -145,18 +148,74 @@ export default async function SpecimenPage({ params }: Props) {
             </div>
           )}
 
-          <div className="pt-2 border-t border-border">
-            <Link
-              href={`${process.env.NEXT_PUBLIC_SOUNDGRAPH_URL ?? 'http://localhost:3000'}/artist/${mbid}`}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              View on MusicGenus →
-            </Link>
-          </div>
         </aside>
       </div>
+
+      {/* Hybrid sections — SoundGraph connection data */}
+      {(hybrid.collaborators.length > 0 || hybrid.samplesFrom.length > 0 || hybrid.sampledBy.length > 0) && (
+        <div className="border-t border-border pt-8 space-y-8">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Connections
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+            {/* Collaborators */}
+            {hybrid.collaborators.length > 0 && (
+              <div className="space-y-3">
+                <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Top Collaborators
+                </div>
+                <div className="space-y-1">
+                  {hybrid.collaborators.map(a => (
+                    <Link
+                      key={a.mbid}
+                      href={`/specimen/${a.mbid}`}
+                      className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-accent transition-colors group"
+                    >
+                      <span className="text-sm font-medium group-hover:text-primary transition-colors truncate">{a.name}</span>
+                      <span className="text-xs text-muted-foreground shrink-0 ml-2">{a.count} tracks</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Sampled from */}
+            {hybrid.samplesFrom.length > 0 && (
+              <div className="space-y-3">
+                <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Sampled From
+                </div>
+                <div className="space-y-1">
+                  {hybrid.samplesFrom.map(r => (
+                    <div key={r.mbid} className="px-3 py-2 rounded-lg border border-border/50">
+                      <div className="text-sm font-medium truncate">{r.title}</div>
+                      {r.artistName && <div className="text-xs text-muted-foreground truncate">{r.artistName}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Sampled by */}
+            {hybrid.sampledBy.length > 0 && (
+              <div className="space-y-3">
+                <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Sampled By
+                </div>
+                <div className="space-y-1">
+                  {hybrid.sampledBy.map(r => (
+                    <div key={r.mbid} className="px-3 py-2 rounded-lg border border-border/50">
+                      <div className="text-sm font-medium truncate">{r.title}</div>
+                      {r.artistName && <div className="text-xs text-muted-foreground truncate">{r.artistName}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   )
 }
