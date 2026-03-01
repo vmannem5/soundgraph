@@ -44,7 +44,7 @@ export function SoundProfileRadar({ values }: Props) {
   const rings = [25, 50, 75, 100]
 
   return (
-    <div className="w-full max-w-xs mx-auto">
+    <div className="w-full max-w-xs mx-auto text-foreground">
       <svg viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ width: '100%', height: 'auto' }}>
         {/* Grid rings */}
         {rings.map(pct => {
@@ -53,13 +53,13 @@ export function SoundProfileRadar({ values }: Props) {
             const { x, y } = polarToXY((360 / N) * i, r)
             return `${x},${y}`
           }).join(' ')
-          return <polygon key={pct} points={pts} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
+          return <polygon key={pct} points={pts} fill="none" stroke="currentColor" strokeOpacity={0.08} strokeWidth={1} />
         })}
 
         {/* Axis spokes */}
         {AXES.map((axis, i) => {
           const { x, y } = polarToXY((360 / N) * i, MAX_R)
-          return <line key={axis.key} x1={CX} y1={CY} x2={x} y2={y} stroke="rgba(255,255,255,0.1)" strokeWidth={1} />
+          return <line key={axis.key} x1={CX} y1={CY} x2={x} y2={y} stroke="currentColor" strokeOpacity={0.1} strokeWidth={1} />
         })}
 
         {/* Data polygon */}
@@ -87,7 +87,8 @@ export function SoundProfileRadar({ values }: Props) {
               textAnchor={anchor}
               dominantBaseline="middle"
               fontSize={9}
-              fill="rgba(255,255,255,0.5)"
+              fill="currentColor"
+              fillOpacity={0.5}
               style={{ userSelect: 'none' }}
             >
               {axis.label}

@@ -147,9 +147,10 @@ export default async function SpecimenPage({ params }: Props) {
 
           <div className="pt-2 border-t border-border">
             <Link
-              href={`http://localhost:3000/artist/${mbid}`}
+              href={`${process.env.NEXT_PUBLIC_SOUNDGRAPH_URL ?? 'http://localhost:3000'}/artist/${mbid}`}
               className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               target="_blank"
+              rel="noopener noreferrer"
             >
               View on SoundGraph →
             </Link>

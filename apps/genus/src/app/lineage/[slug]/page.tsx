@@ -1,6 +1,5 @@
 import Link from 'next/link'
-import { getTaxonomyNode, getSoundFamilies } from '@/lib/data-service'
-import { prisma } from '@soundgraph/database'
+import { getTaxonomyNode, getSoundFamilies, getSpecimensForTaxonomy } from '@/lib/data-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,15 +32,7 @@ export default async function LineagePage({ params }: Props) {
     )
   }
 
-  const specimens = await prisma.$queryRaw<Array<{ mbid: string; name: string; country: string | null }>>`
-    SELECT a.mbid, a.name, a.country
-    FROM "SpecimenClassification" sc
-    JOIN "Artist" a ON a.mbid = sc."entityMbid"
-    WHERE sc."taxonomyId" = ${node.id}
-      AND sc."entityType" = 'artist'
-    ORDER BY a.popularity DESC NULLS LAST
-    LIMIT 20
-  `.catch(() => [])
+  const specimens = await getSpecimensForTaxonomy(node.id)
 
   // Build breadcrumb
   const breadcrumb: Array<{ name: string; slug: string }> = []

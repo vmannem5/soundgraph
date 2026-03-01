@@ -145,13 +145,27 @@ export async function getSpecimenDetail(mbid: string): Promise<SpecimenDetail | 
   )[0]
   const lineage = deepest ? buildLineage(deepest.taxonomy) : []
 
+  // Look up each related artist's own primary family
+  const relatedMbids = relatedRaw.map(r => r.mbid)
+  const relFamilyMap = new Map<string, { name: string; slug: string }>()
+  if (relatedMbids.length > 0) {
+    const relFams = await prisma.$queryRaw<Array<{ entityMbid: string; name: string; slug: string }>>`
+      SELECT sc."entityMbid", gt.name, gt.slug
+      FROM "SpecimenClassification" sc
+      JOIN "GenreTaxonomy" gt ON gt.id = sc."taxonomyId" AND gt.level = 'family'
+      WHERE sc."entityMbid" = ANY(${relatedMbids})
+        AND sc."entityType" = 'artist'
+    `.catch(() => [])
+    for (const f of relFams) relFamilyMap.set(f.entityMbid, { name: f.name, slug: f.slug })
+  }
+
   const relatedSpecimens: SpecimenSummary[] = relatedRaw.map(r => ({
     mbid: r.mbid,
     name: r.name,
     country: r.country,
     type: r.type,
-    primaryFamily,
-    primaryFamilySlug,
+    primaryFamily: relFamilyMap.get(r.mbid)?.name ?? null,
+    primaryFamilySlug: relFamilyMap.get(r.mbid)?.slug ?? null,
     lineage: [],  // not fetched for related specimens
   }))
 
@@ -180,6 +194,18 @@ export async function getSpecimenDetail(mbid: string): Promise<SpecimenDetail | 
     })),
     relatedSpecimens,
   }
+}
+
+export async function getSpecimensForTaxonomy(taxonomyId: string): Promise<Array<{ mbid: string; name: string; country: string | null }>> {
+  return prisma.$queryRaw<Array<{ mbid: string; name: string; country: string | null }>>`
+    SELECT a.mbid, a.name, a.country
+    FROM "SpecimenClassification" sc
+    JOIN "Artist" a ON a.mbid = sc."entityMbid"
+    WHERE sc."taxonomyId" = ${taxonomyId}
+      AND sc."entityType" = 'artist'
+    ORDER BY a.popularity DESC NULLS LAST
+    LIMIT 20
+  `.catch(() => [])
 }
 
 export async function searchSpecimens(query: string): Promise<SpecimenSummary[]> {
