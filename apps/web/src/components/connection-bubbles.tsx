@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { hierarchy, pack } from 'd3-hierarchy'
-import type { HierarchyCircularNode } from 'd3-hierarchy'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -17,325 +16,315 @@ export interface Connection {
   attributes?: string[]
 }
 
-interface BubbleData {
+interface CategoryData {
   id: string
-  name: string
-  targetType?: string
-  targetId?: string
-  importance: number
+  label: string
   color: string
   bg: string
-  isCategory?: boolean
-  isSubcategory?: boolean
-  children?: BubbleData[]
+  importance: number
+  leaves: LeafData[]
+}
+
+interface LeafData {
+  id: string
+  name: string
+  targetType: string
+  targetId: string
+  importance: number
 }
 
 // ── Category config ────────────────────────────────────────────────────────
 
-const CATEGORY_STYLES: Record<string, { label: string; color: string; bg: string }> = {
-  'SAMPLES FROM': { label: 'Samples From', color: '#c4956a', bg: 'rgba(196,149,106,0.18)' },
-  'SAMPLED BY':   { label: 'Sampled By',   color: '#8b9cc4', bg: 'rgba(139,156,196,0.18)' },
-  'CREDITS':      { label: 'Credits',       color: '#d6d3d1', bg: 'rgba(214,211,209,0.10)' },
-  'PERFORMERS':   { label: 'Performers',    color: '#a3a3a3', bg: 'rgba(163,163,163,0.10)' },
-}
+const CAT = {
+  SAMPLES_FROM: { label: 'Samples From', color: '#c4956a', bg: 'rgba(196,149,106,0.14)' },
+  SAMPLED_BY:   { label: 'Sampled By',   color: '#8b9cc4', bg: 'rgba(139,156,196,0.14)' },
+  CREDITS:      { label: 'Credits',       color: '#d6d3d1', bg: 'rgba(214,211,209,0.07)' },
+  PERFORMERS:   { label: 'Performers',    color: '#a3a3a3', bg: 'rgba(163,163,163,0.07)' },
+} as const
 
-// Order: samples always first
-const CATEGORY_ORDER = ['SAMPLES FROM', 'SAMPLED BY', 'CREDITS', 'PERFORMERS']
+const CAT_ORDER = ['SAMPLES_FROM', 'SAMPLED_BY', 'CREDITS', 'PERFORMERS'] as const
+type CatKey = typeof CAT_ORDER[number]
 
-const CREDITS_SUBGROUP: Record<string, string> = {
-  producer: 'Producers', composer: 'Producers', lyricist: 'Producers',
-  writer: 'Producers', arranger: 'Producers',
-  engineer: 'Engineers & Mix', mix: 'Engineers & Mix',
-  audio: 'Engineers & Mix', mastering: 'Engineers & Mix',
-}
-
-function getCategoryKey(type: string): string {
+function getCatKey(type: string): CatKey {
   const t = type.toLowerCase()
-  if (t === 'samples material' || t === 'sample' || t === 'samples from' || (t.startsWith('sample') && !t.includes('by'))) return 'SAMPLES FROM'
-  if (t === 'sampled by' || t.includes('sampled by')) return 'SAMPLED BY'
-  if (t === 'performer' || t.includes('vocal') || t.includes('instrument') || t.includes('performance')) return 'PERFORMERS'
+  if (t.includes('sample') && !t.includes('by')) return 'SAMPLES_FROM'
+  if (t === 'sampled by' || t.includes('sampled by')) return 'SAMPLED_BY'
+  if (t === 'performer' || t.includes('vocal') || t.includes('instrument')) return 'PERFORMERS'
   return 'CREDITS'
 }
 
-// ── Hierarchy builder ──────────────────────────────────────────────────────
+// ── Data processing ────────────────────────────────────────────────────────
 
-function buildHierarchy(connections: Connection[]): BubbleData {
+function buildCategories(connections: Connection[]): CategoryData[] {
   const maxImp = Math.max(...connections.map(c => c.importance || 1), 1)
   const norm = (imp: number) =>
-    Math.max(1, (Math.log1p(imp || 1) / Math.log1p(maxImp)) * 100)
+    Math.max(8, (Math.log1p(imp || 1) / Math.log1p(maxImp)) * 100)
 
-  // Group by category, deduplicating by targetId
-  const groups = new Map<string, Connection[]>()
-  const seenIds = new Set<string>()
+  const map = new Map<CatKey, Connection[]>()
+  const seen = new Set<string>()
+
   for (const conn of connections) {
-    const cat = getCategoryKey(conn.type)
-    if (!groups.has(cat)) groups.set(cat, [])
-    const key = `${cat}-${conn.targetId}`
-    if (!seenIds.has(key)) {
-      seenIds.add(key)
-      groups.get(cat)!.push(conn)
+    const key = getCatKey(conn.type)
+    if (!map.has(key)) map.set(key, [])
+    const dedupeKey = `${key}-${conn.targetId}`
+    if (!seen.has(dedupeKey)) {
+      seen.add(dedupeKey)
+      map.get(key)!.push(conn)
     }
   }
 
-  const children: BubbleData[] = []
-
-  const sortedGroups = [...groups.entries()].sort(
-    ([a], [b]) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b)
-  )
-
-  for (const [cat, conns] of sortedGroups) {
-    const style = CATEGORY_STYLES[cat] || { label: cat, color: '#6b7280', bg: 'rgba(107,114,128,0.10)' }
-
-    if (cat === 'CREDITS') {
-      // Sub-group by role type
-      const subMap = new Map<string, Connection[]>()
-      for (const conn of conns) {
-        const sg = CREDITS_SUBGROUP[conn.type.toLowerCase()] || 'Other Credits'
-        if (!subMap.has(sg)) subMap.set(sg, [])
-        subMap.get(sg)!.push(conn)
-      }
-
-      const subchildren: BubbleData[] = []
-      for (const [sgLabel, sgConns] of subMap) {
-        const leaves = sgConns.slice(0, 12).map(c => ({
-          id: `leaf-${c.targetId}-${c.type}`,
-          name: c.targetName,
-          targetType: c.targetType,
-          targetId: c.targetId,
-          importance: norm(c.importance || 1),
-          color: style.color,
-          bg: style.bg,
-        }))
-        subchildren.push({
-          id: `subcat-${sgLabel}`,
-          name: sgLabel,
-          isSubcategory: true,
-          importance: leaves.reduce((s, n) => s + n.importance, 0),
-          color: style.color,
-          bg: style.bg,
-          children: leaves,
-        })
-      }
-
-      children.push({
-        id: 'cat-CREDITS',
-        name: style.label,
-        isCategory: true,
-        importance: subchildren.reduce((s, n) => s + n.importance, 0),
-        color: style.color,
-        bg: style.bg,
-        children: subchildren,
-      })
-    } else {
-      const overflow = Math.max(0, conns.length - 12)
-      const leaves: BubbleData[] = conns.slice(0, 12).map(c => ({
+  return CAT_ORDER
+    .filter(key => map.has(key))
+    .map(key => {
+      const cfg = CAT[key]
+      const conns = map.get(key)!
+      const leaves: LeafData[] = conns.slice(0, 15).map(c => ({
         id: `leaf-${c.targetId}-${c.type}`,
         name: c.targetName,
         targetType: c.targetType,
         targetId: c.targetId,
         importance: norm(c.importance || 1),
-        color: style.color,
-        bg: style.bg,
       }))
-      if (overflow > 0) {
-        leaves.push({
-          id: `overflow-${cat}`,
-          name: `+${overflow} more`,
-          importance: norm(1),
-          color: style.color,
-          bg: style.bg,
-        })
+      // Dampen size differences: 30 base + scaled sum so small categories are still visible
+      const rawImp = leaves.reduce((s, l) => s + l.importance, 0)
+      return {
+        id: `cat-${key}`,
+        label: cfg.label,
+        color: cfg.color,
+        bg: cfg.bg,
+        importance: 30 + rawImp * 0.45,
+        leaves,
       }
-
-      children.push({
-        id: `cat-${cat}`,
-        name: style.label,
-        isCategory: true,
-        importance: leaves.reduce((s, n) => s + n.importance, 0),
-        color: style.color,
-        bg: style.bg,
-        children: leaves,
-      })
-    }
-  }
-
-  return { id: 'root', name: 'root', importance: 1, color: 'transparent', bg: 'transparent', children }
+    })
 }
 
-// ── Layout ─────────────────────────────────────────────────────────────────
+// ── Two-level pack layout ───────────────────────────────────────────────────
+//
+// OUTER: categories treated as flat leaves, sized by importance.
+//        Gives clean proportional circles for the collapsed overview.
+//
+// INNER: run per-category when expanded, packs leaves inside the outer radius.
+//        Completely independent from the outer layout.
 
-const WIDTH = 800
-const HEIGHT = 560
+const W = 680
+const H = 680
 
-function runPackLayout(data: BubbleData) {
-  const root = hierarchy<BubbleData>(data)
-    .sum(d => (d.children ? 0 : d.importance))
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function outerPack(cats: CategoryData[]): any[] {
+  if (!cats.length) return []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const root = hierarchy<any>({ children: cats.map(c => ({ id: c.id, importance: c.importance })) })
+    .sum((d) => d.importance || 0)
     .sort((a, b) => (b.value || 0) - (a.value || 0))
 
-  return pack<BubbleData>()
-    .size([WIDTH, HEIGHT])
-    .padding(d => {
-      if (d.depth === 0) return 0
-      if (d.depth === 1) return 18  // between categories
-      return 6                       // between leaves inside a cluster
-    })(root)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const packed = pack<any>().size([W, H]).padding(20)(root)
+  return packed.children || []
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function innerPack(leaves: LeafData[], containerR: number): any[] {
+  // Reserve top space for the category label
+  const labelPad = Math.max(24, containerR * 0.14)
+  const avail = (containerR - labelPad) * 2
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const root = hierarchy<any>({ children: leaves })
+    .sum((d) => d.importance || 0)
+    .sort((a, b) => (b.value || 0) - (a.value || 0))
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const packed = pack<any>().size([avail, avail]).padding(4)(root)
+
+  // Translate from [0..avail] space to [-containerR..containerR] with downward offset for label
+  const offset = containerR - labelPad
+  return (packed.children || []).map((n: {x: number; y: number; r: number; data: LeafData}) => ({
+    data: n.data,
+    x: n.x - offset,
+    y: n.y - offset + labelPad * 0.5,
+    r: n.r,
+  }))
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-interface ConnectionBubblesProps {
-  connections: Connection[]
-}
-
-export function ConnectionBubbles({ connections }: ConnectionBubblesProps) {
+export function ConnectionBubbles({ connections }: { connections: Connection[] }) {
   const router = useRouter()
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
 
-  const packed = useMemo(() => {
-    if (connections.length === 0) return null
-    const data = buildHierarchy(connections)
-    return runPackLayout(data)
-  }, [connections])
+  const categories = useMemo(() => buildCategories(connections), [connections])
 
-  const handleCircleClick = useCallback((e: React.MouseEvent, node: HierarchyCircularNode<BubbleData>) => {
-    e.stopPropagation()
-    if (node.data.isCategory || node.data.isSubcategory) {
-      setExpanded(prev => {
-        const next = new Set(prev)
-        if (next.has(node.data.id)) next.delete(node.data.id)
-        else next.add(node.data.id)
-        return next
-      })
-      return
-    }
-    const { targetType, targetId } = node.data
-    if (!targetType || !targetId) return
-    if (targetType === 'artist') router.push(`/artist/${targetId}`)
-    else if (targetType === 'recording') router.push(`/recording/${targetId}`)
-  }, [router])
+  const outerNodes = useMemo(() => outerPack(categories), [categories])
 
-  if (!packed || connections.length === 0) {
+  const expandedLeaves = useMemo(() => {
+    if (!expandedId) return null
+    const outerNode = outerNodes.find((n) => n.data.id === expandedId)
+    if (!outerNode) return null
+    const cat = categories.find(c => c.id === expandedId)
+    if (!cat) return null
+    return innerPack(cat.leaves, outerNode.r)
+  }, [expandedId, outerNodes, categories])
+
+  if (!categories.length) {
     return (
-      <div className="w-full h-[400px] rounded-xl border border-white/5 bg-[#0c0c10] flex items-center justify-center">
+      <div className="w-full h-56 rounded-xl border border-white/5 bg-[#0c0c10] flex items-center justify-center">
         <p className="text-muted-foreground text-sm">No connections found.</p>
       </div>
     )
   }
 
-  const allNodes = packed.descendants().slice(1) // exclude invisible root
-
-  // Determine visible nodes based on expand state
-  const visibleNodes = allNodes.filter(node => {
-    const d = node.depth
-    if (d === 1) return true  // category always visible
-    const parentId = node.parent?.data.id
-    if (!parentId) return false
-    if (d === 2) return expanded.has(parentId)  // show when category expanded
-    if (d === 3) {
-      // Credits sub-leaf: show when Credits category AND parent subcategory both expanded
-      const grandparentId = node.parent?.parent?.data.id
-      return grandparentId
-        ? expanded.has(grandparentId) && expanded.has(parentId)
-        : expanded.has(parentId)
-    }
-    return false
-  })
-
   return (
     <div
       className="w-full rounded-xl border border-white/5 overflow-hidden"
       style={{ background: '#0c0c10' }}
-      onClick={() => { setExpanded(new Set()); setTooltip(null) }}
+      onClick={() => { setExpandedId(null); setTooltip(null) }}
     >
       <svg
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        viewBox={`0 0 ${W} ${H}`}
         style={{ width: '100%', height: 'auto', display: 'block' }}
       >
-        {visibleNodes.map(node => {
-          const { id, name, color, bg, isCategory, isSubcategory } = node.data
-          const isExpanded = expanded.has(id)
-          const isLeaf = !isCategory && !isSubcategory
-          const r = Math.max(node.r, 4)
-          const fontSize = Math.min(13, Math.max(9, r * 0.28))
-          const showText = r >= 22
+        {outerNodes.map((outerNode) => {
+          const catId = outerNode.data.id as string
+          const cat = categories.find(c => c.id === catId)!
+          const isExpanded = expandedId === catId
+          const { x: cx, y: cy, r } = outerNode
+          const labelFs = Math.min(15, Math.max(10, r * 0.15))
 
           return (
             <g
-              key={id}
-              style={{ cursor: 'pointer', transition: 'opacity 0.2s ease' }}
-              onClick={(e) => handleCircleClick(e, node)}
-              onMouseEnter={(e) => {
-                if (r < 30) {
-                  const svgEl = (e.currentTarget.closest('svg') as SVGSVGElement)
-                  const rect = svgEl?.getBoundingClientRect()
-                  void rect
-                  setTooltip({ text: name, x: node.x, y: node.y - r - 8 })
-                }
+              key={catId}
+              style={{ cursor: 'pointer' }}
+              onClick={(e) => {
+                e.stopPropagation()
+                setExpandedId(isExpanded ? null : catId)
+                setTooltip(null)
               }}
-              onMouseLeave={() => setTooltip(null)}
             >
+              {/* Category ring */}
               <circle
-                cx={node.x}
-                cy={node.y}
-                r={r}
-                fill={isExpanded ? bg.replace('0.18', '0.06').replace('0.10', '0.04') : bg}
-                stroke={color}
-                strokeWidth={isCategory ? 2 : 1}
-                strokeOpacity={isExpanded ? 0.6 : 0.45}
+                cx={cx} cy={cy} r={r}
+                fill={isExpanded
+                  ? cat.bg.replace('0.14', '0.04').replace('0.07', '0.02')
+                  : cat.bg}
+                stroke={cat.color}
+                strokeWidth={isExpanded ? 1.5 : 1.2}
+                strokeOpacity={isExpanded ? 0.7 : 0.45}
               />
-              {showText && (
-                <text
-                  x={node.x}
-                  y={node.y}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fill={isLeaf ? '#e5e5e5' : color}
-                  fontSize={fontSize}
-                  fontWeight={isCategory ? '700' : isSubcategory ? '600' : '400'}
-                  style={{ pointerEvents: 'none', userSelect: 'none' }}
-                >
-                  {name.length > Math.floor(r / 4) ? name.slice(0, Math.floor(r / 4)) + '…' : name}
-                </text>
+
+              {/* Category label — top of circle when expanded, center when collapsed */}
+              <text
+                x={cx}
+                y={isExpanded ? cy - r + labelFs + 8 : cy - labelFs * 0.3}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fill={cat.color}
+                fontSize={labelFs}
+                fontWeight="700"
+                style={{ pointerEvents: 'none', userSelect: 'none' }}
+              >
+                {cat.label}
+              </text>
+
+              {/* Collapsed hint */}
+              {!isExpanded && (
+                <>
+                  <text
+                    x={cx}
+                    y={cy + labelFs * 0.85}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fill={cat.color}
+                    fontSize={Math.max(9, labelFs * 0.7)}
+                    opacity={0.45}
+                    style={{ pointerEvents: 'none', userSelect: 'none' }}
+                  >
+                    {cat.leaves.length} {cat.leaves.length === 1 ? 'item' : 'items'}
+                  </text>
+                  {r > 55 && (
+                    <text
+                      x={cx}
+                      y={cy + labelFs * 2}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fill={cat.color}
+                      fontSize={Math.max(8, labelFs * 0.62)}
+                      opacity={0.28}
+                      style={{ pointerEvents: 'none', userSelect: 'none' }}
+                    >
+                      tap to expand
+                    </text>
+                  )}
+                </>
               )}
-              {isCategory && !isExpanded && (
-                <text
-                  x={node.x}
-                  y={node.y + fontSize * 1.2}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fill={color}
-                  fontSize={Math.max(8, fontSize * 0.75)}
-                  opacity={0.6}
-                  style={{ pointerEvents: 'none', userSelect: 'none' }}
-                >
-                  tap to expand
-                </text>
-              )}
+
+              {/* Expanded leaves — rendered inside the outer circle */}
+              {isExpanded && expandedLeaves && expandedLeaves.map((leaf: {data: LeafData; x: number; y: number; r: number}) => {
+                const ld = leaf.data
+                const lr = Math.max(leaf.r, 3)
+                const lx = cx + leaf.x
+                const ly = cy + leaf.y
+                const showText = lr >= 14
+
+                return (
+                  <g
+                    key={ld.id}
+                    style={{ cursor: 'pointer' }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (ld.targetType === 'artist') router.push(`/artist/${ld.targetId}`)
+                      else if (ld.targetType === 'recording') router.push(`/recording/${ld.targetId}`)
+                    }}
+                    onMouseEnter={() => {
+                      if (lr < 28) setTooltip({ text: ld.name, x: lx, y: ly - lr - 8 })
+                    }}
+                    onMouseLeave={() => setTooltip(null)}
+                  >
+                    <circle
+                      cx={lx} cy={ly} r={lr}
+                      fill={cat.bg}
+                      stroke={cat.color}
+                      strokeWidth={0.75}
+                      strokeOpacity={0.6}
+                    />
+                    {showText && (
+                      <text
+                        x={lx} y={ly}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fill="#e0e0e0"
+                        fontSize={Math.min(10, lr * 0.42)}
+                        style={{ pointerEvents: 'none', userSelect: 'none' }}
+                      >
+                        {ld.name.length > Math.floor(lr / 3.5)
+                          ? ld.name.slice(0, Math.floor(lr / 3.5)) + '…'
+                          : ld.name}
+                      </text>
+                    )}
+                  </g>
+                )
+              })}
             </g>
           )
         })}
 
-        {/* Tooltip for small nodes */}
+        {/* Tooltip for tiny leaf nodes */}
         {tooltip && (
           <g style={{ pointerEvents: 'none' }}>
             <rect
-              x={tooltip.x - 60}
-              y={tooltip.y - 18}
-              width={120}
-              height={24}
-              rx={6}
-              fill="rgba(18,18,24,0.95)"
-              stroke="rgba(255,255,255,0.12)"
+              x={tooltip.x - 68} y={tooltip.y - 15}
+              width={136} height={22}
+              rx={5}
+              fill="rgba(12,12,16,0.96)"
+              stroke="rgba(255,255,255,0.1)"
             />
             <text
-              x={tooltip.x}
-              y={tooltip.y - 6}
+              x={tooltip.x} y={tooltip.y - 4}
               textAnchor="middle"
-              fill="#f5f5f5"
-              fontSize={11}
+              fill="#f0f0f0"
+              fontSize={10}
             >
-              {tooltip.text.length > 20 ? tooltip.text.slice(0, 18) + '…' : tooltip.text}
+              {tooltip.text.length > 24 ? tooltip.text.slice(0, 22) + '…' : tooltip.text}
             </text>
           </g>
         )}
