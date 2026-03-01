@@ -1,9 +1,10 @@
-import { getArtistDetails } from '@/lib/data-service'
+import { getArtistDetails, getArtistConnections } from '@/lib/data-service'
 import { prisma } from '@soundgraph/database'
 import * as mb from '@/lib/musicbrainz'
 import { Badge } from '@/components/ui/badge'
 import { GeneratedAvatar } from '@/lib/avatar'
 import { ReleaseGroupCover } from '@/components/release-group-cover'
+import { KnowledgeGraph } from '@/components/knowledge-graph'
 import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
@@ -69,17 +70,22 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
     )
   }
 
-  // Try API for release groups, fall back to DB
-  let releaseGroupsList: any[] = []
-  try {
-    const rgs = await mb.getArtistReleaseGroups(mbid, 25)
-    releaseGroupsList = rgs['release-groups'] || []
-  } catch {
-    releaseGroupsList = await getArtistReleaseGroupsFromDb(mbid)
-  }
+  // Fetch connections (collaborators, producers, samples) in parallel with release groups
+  const [connectionsData, releaseGroupsResult] = await Promise.all([
+    getArtistConnections(mbid),
+    (async () => {
+      try {
+        const rgs = await mb.getArtistReleaseGroups(mbid, 25)
+        return rgs['release-groups'] || []
+      } catch {
+        return await getArtistReleaseGroupsFromDb(mbid)
+      }
+    })(),
+  ])
+  const { topCollaborators, topProducers, samplesFrom, sampledBy } = connectionsData
 
   // Sort newest first
-  releaseGroupsList = sortReleaseGroupsNewestFirst(releaseGroupsList)
+  const releaseGroupsList = sortReleaseGroupsNewestFirst(releaseGroupsResult)
 
   const tags = artist.tags?.slice(0, 10) || []
   const spotifyGenres: string[] = artist.spotifyData?.genres || []
@@ -209,6 +215,171 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
           <p className="text-muted-foreground text-sm py-4">No releases found.</p>
         )}
       </div>
+
+      {/* Connections section */}
+      {(topCollaborators.length > 0 || topProducers.length > 0 || samplesFrom.length > 0 || sampledBy.length > 0) && (
+        <div className="max-w-6xl mx-auto px-4 sm:px-8 pb-8 space-y-10">
+
+          {/* Top Collaborators */}
+          {topCollaborators.length > 0 && (
+            <section>
+              <h2 className="text-xl font-semibold mb-4">Top Collaborators</h2>
+              <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+                {topCollaborators.map((a) => (
+                  <Link
+                    key={a.mbid}
+                    href={`/artist/${a.mbid}`}
+                    className="group flex flex-col items-center gap-2 shrink-0 w-24"
+                  >
+                    <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-transparent group-hover:ring-primary transition-all">
+                      <GeneratedAvatar id={a.mbid} name={a.name} genres={[]} size={64} />
+                    </div>
+                    <p className="text-xs text-center font-medium leading-tight line-clamp-2 group-hover:text-primary transition-colors">
+                      {a.name}
+                    </p>
+                    <span className="text-xs text-muted-foreground">{a.count} tracks</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Top Producers */}
+          {topProducers.length > 0 && (
+            <section>
+              <h2 className="text-xl font-semibold mb-4">Produced By</h2>
+              <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+                {topProducers.map((a) => (
+                  <Link
+                    key={a.mbid}
+                    href={`/artist/${a.mbid}`}
+                    className="group flex flex-col items-center gap-2 shrink-0 w-24"
+                  >
+                    <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-transparent group-hover:ring-primary transition-all">
+                      <GeneratedAvatar id={a.mbid} name={a.name} genres={[]} size={64} />
+                    </div>
+                    <p className="text-xs text-center font-medium leading-tight line-clamp-2 group-hover:text-primary transition-colors">
+                      {a.name}
+                    </p>
+                    <span className="text-xs text-muted-foreground">{a.count} tracks</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Sample History */}
+          {(samplesFrom.length > 0 || sampledBy.length > 0) && (
+            <section>
+              <h2 className="text-xl font-semibold mb-4">Sample History</h2>
+              <div className="grid sm:grid-cols-2 gap-6">
+                {samplesFrom.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                      Sampled From ({samplesFrom.length})
+                    </h3>
+                    <div className="space-y-1">
+                      {samplesFrom.map((s) => (
+                        <Link
+                          key={s.rec_mbid}
+                          href={`/recording/${s.rec_mbid}`}
+                          className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/10 transition-colors group"
+                        >
+                          <div className="w-8 h-8 rounded shrink-0 overflow-hidden">
+                            <GeneratedAvatar id={s.rec_mbid} name={s.rec_title} genres={[]} size={32} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">
+                              {s.rec_title}
+                            </p>
+                            {s.artist_name && (
+                              <p className="text-xs text-muted-foreground truncate">{s.artist_name}</p>
+                            )}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {sampledBy.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                      Sampled By ({sampledBy.length})
+                    </h3>
+                    <div className="space-y-1">
+                      {sampledBy.map((s) => (
+                        <Link
+                          key={s.rec_mbid}
+                          href={`/recording/${s.rec_mbid}`}
+                          className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/10 transition-colors group"
+                        >
+                          <div className="w-8 h-8 rounded shrink-0 overflow-hidden">
+                            <GeneratedAvatar id={s.rec_mbid} name={s.rec_title} genres={[]} size={32} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">
+                              {s.rec_title}
+                            </p>
+                            {s.artist_name && (
+                              <p className="text-xs text-muted-foreground truncate">{s.artist_name}</p>
+                            )}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* Connection Mind Map */}
+          {(topCollaborators.length > 0 || topProducers.length > 0 || samplesFrom.length > 0 || sampledBy.length > 0) && (
+            <section>
+              <h2 className="text-xl font-semibold mb-4">Connection Map</h2>
+              <KnowledgeGraph
+                recording={{
+                  id: mbid,
+                  title: artist.name,
+                  spotifyData: heroImageUrl
+                    ? { album: { images: [{ url: heroImageUrl }] } }
+                    : undefined,
+                }}
+                connections={[
+                  ...topCollaborators.slice(0, 8).map((a) => ({
+                    type: 'performer',
+                    label: `${a.count} collabs`,
+                    targetType: 'artist',
+                    targetId: a.mbid,
+                    targetName: a.name,
+                  })),
+                  ...topProducers.slice(0, 6).map((a) => ({
+                    type: 'producer',
+                    label: `${a.count} productions`,
+                    targetType: 'artist',
+                    targetId: a.mbid,
+                    targetName: a.name,
+                  })),
+                  ...samplesFrom.slice(0, 4).map((s) => ({
+                    type: 'samples material',
+                    label: 'samples',
+                    targetType: 'recording',
+                    targetId: s.rec_mbid,
+                    targetName: s.artist_name ? `${s.rec_title} (${s.artist_name})` : s.rec_title,
+                  })),
+                  ...sampledBy.slice(0, 4).map((s) => ({
+                    type: 'sampled by',
+                    label: 'sampled by',
+                    targetType: 'recording',
+                    targetId: s.rec_mbid,
+                    targetName: s.artist_name ? `${s.rec_title} (${s.artist_name})` : s.rec_title,
+                  })),
+                ]}
+              />
+            </section>
+          )}
+        </div>
+      )}
     </main>
   )
 }

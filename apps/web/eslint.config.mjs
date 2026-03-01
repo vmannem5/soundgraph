@@ -30,6 +30,7 @@ const eslintConfig = [
       "src/components/recording-header.tsx",
       "src/app/recording/*/page.tsx",
       "src/app/artist/*/page.tsx",
+      "src/components/release-group-cover.tsx",
     ],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
