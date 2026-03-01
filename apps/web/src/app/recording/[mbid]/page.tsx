@@ -1,5 +1,5 @@
 import { getRecordingConnections } from '@/lib/data-service'
-import { KnowledgeGraphClient as KnowledgeGraph } from '@/components/knowledge-graph-client'
+import { KnowledgeGraph } from '@/components/knowledge-graph'
 import { RecordingHeader } from '@/components/recording-header'
 import { SpotifyEmbed } from '@/components/spotify-embed'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
