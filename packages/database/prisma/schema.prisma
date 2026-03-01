@@ -209,3 +209,51 @@ model ApiCache {
   @@index([source])
   @@index([expiresAt])
 }
+
+// === GENUS: Sound Taxonomy ===
+
+model GenreTaxonomy {
+  id            Int     @id @default(autoincrement())
+  name          String
+  slug          String  @unique
+  level         String  // family | movement | scene | sound | strain
+  parentId      Int?
+  description   String?
+  specimenCount Int     @default(0)
+
+  parent        GenreTaxonomy?  @relation("TaxonomyTree", fields: [parentId], references: [id])
+  children      GenreTaxonomy[] @relation("TaxonomyTree")
+  classifications SpecimenClassification[]
+
+  @@index([slug])
+  @@index([parentId])
+  @@index([level])
+}
+
+model SpecimenClassification {
+  id          Int    @id @default(autoincrement())
+  entityType  String // "artist" | "recording"
+  entityMbid  String
+  taxonomyId  Int
+  confidence  Float  @default(1.0)
+
+  taxonomy    GenreTaxonomy @relation(fields: [taxonomyId], references: [id])
+
+  @@unique([entityType, entityMbid, taxonomyId])
+  @@index([entityMbid])
+  @@index([taxonomyId])
+}
+
+model SoundProfile {
+  id                  Int    @id @default(autoincrement())
+  entityType          String // "artist"
+  entityMbid          String @unique
+  genreBreadth        Float  @default(0)
+  sampleUse           Float  @default(0)
+  collaborationRadius Float  @default(0)
+  eraSpread           Float  @default(0)
+  instrumentDiversity Float  @default(0)
+  geographicReach     Float  @default(0)
+
+  @@index([entityType])
+}
