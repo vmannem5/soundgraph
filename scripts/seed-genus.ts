@@ -94,7 +94,7 @@ async function main() {
       FROM "Artist" a
       JOIN "ArtistTag" at ON at."artistId" = a.id
       WHERE LOWER(at.tag) = ANY(${fam.tags})
-      LIMIT 500
+      LIMIT 500 -- MVP: seed top 500 artists per family; re-run to reclassify
     `
 
     let classifiedInFamily = 0
@@ -118,10 +118,14 @@ async function main() {
       classifiedInFamily++
     }
 
-    // Update specimenCount on the taxonomy node
+    // Update specimenCount on the taxonomy node using actual DB count
+    // (avoids drift if upserts skipped existing rows or rows were deleted)
+    const actualCount = await prisma.specimenClassification.count({
+      where: { taxonomyId, entityType: 'artist' },
+    })
     await prisma.genreTaxonomy.update({
       where: { id: taxonomyId },
-      data: { specimenCount: classifiedInFamily },
+      data: { specimenCount: actualCount },
     })
 
     totalClassified += classifiedInFamily
