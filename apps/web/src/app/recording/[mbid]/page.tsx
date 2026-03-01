@@ -2,7 +2,6 @@ import { getRecordingConnections } from '@/lib/data-service'
 import { KnowledgeGraph } from '@/components/knowledge-graph'
 import { RecordingHeader } from '@/components/recording-header'
 import { SpotifyEmbed } from '@/components/spotify-embed'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
 
@@ -29,12 +28,11 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
     (c) => c.targetType === 'recording'
   )
 
-  // Extract Spotify track ID if available
   const spotifyTrackId = recording.spotifyData?.id ||
     recording.spotifyData?.external_urls?.spotify?.match(/track\/([a-zA-Z0-9]+)/)?.[1]
 
   return (
-    <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+    <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-8">
       <Link
         href="/"
         className="text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -44,35 +42,22 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
 
       <RecordingHeader recording={recording} connections={connections} />
 
-      {/* Spotify Embedded Player */}
       {spotifyTrackId && (
         <SpotifyEmbed trackId={spotifyTrackId} />
       )}
 
-      <Tabs defaultValue="graph" className="w-full">
-        <TabsList className="bg-muted/50">
-          <TabsTrigger value="graph">Mind Map</TabsTrigger>
-          <TabsTrigger value="credits">Credits ({credits.length})</TabsTrigger>
-          <TabsTrigger value="performers">
-            Performers ({performers.length})
-          </TabsTrigger>
-          {samples.length > 0 && (
-            <TabsTrigger value="samples">
-              Samples ({samples.length})
-            </TabsTrigger>
-          )}
-        </TabsList>
+      {/* Mind Map — always visible, fixed height so page scrolls past it */}
+      <section>
+        <h2 className="text-xl font-bold mb-3">Mind Map</h2>
+        <KnowledgeGraph recording={recording} connections={connections} />
+      </section>
 
-        <TabsContent value="graph" className="mt-3">
-          <KnowledgeGraph recording={recording} connections={connections} />
-        </TabsContent>
-
-        <TabsContent value="credits" className="mt-3">
+      {/* Credits */}
+      {credits.length > 0 && (
+        <section>
+          <h2 className="text-xl font-bold mb-3">Credits ({credits.length})</h2>
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle>Credits</CardTitle>
-            </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4">
               <div className="divide-y">
                 {credits.map((credit) => (
                   <div
@@ -90,20 +75,18 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
                     </span>
                   </div>
                 ))}
-                {credits.length === 0 && (
-                  <p className="text-muted-foreground text-sm">No credits found.</p>
-                )}
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </section>
+      )}
 
-        <TabsContent value="performers" className="mt-3">
+      {/* Performers */}
+      {performers.length > 0 && (
+        <section>
+          <h2 className="text-xl font-bold mb-3">Performers ({performers.length})</h2>
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle>Performers</CardTitle>
-            </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4">
               <div className="divide-y">
                 {performers.map((perf) => (
                   <div
@@ -121,44 +104,40 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
                     </span>
                   </div>
                 ))}
-                {performers.length === 0 && (
-                  <p className="text-muted-foreground text-sm">No performers found.</p>
-                )}
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </section>
+      )}
 
-        {samples.length > 0 && (
-          <TabsContent value="samples" className="mt-3">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle>Samples</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="divide-y">
-                  {samples.map((sample) => (
-                    <div
-                      key={sample.targetId}
-                      className="flex justify-between items-center py-3"
+      {/* Samples */}
+      {samples.length > 0 && (
+        <section>
+          <h2 className="text-xl font-bold mb-3">Samples ({samples.length})</h2>
+          <Card>
+            <CardContent className="pt-4">
+              <div className="divide-y">
+                {samples.map((sample) => (
+                  <div
+                    key={sample.targetId}
+                    className="flex justify-between items-center py-3"
+                  >
+                    <Link
+                      href={`/recording/${sample.targetId}`}
+                      className="font-medium hover:underline"
                     >
-                      <Link
-                        href={`/recording/${sample.targetId}`}
-                        className="font-medium hover:underline"
-                      >
-                        {sample.targetName}
-                      </Link>
-                      <span className="text-sm text-muted-foreground">
-                        {sample.type}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
-      </Tabs>
+                      {sample.targetName}
+                    </Link>
+                    <span className="text-sm text-muted-foreground capitalize">
+                      {sample.type}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      )}
     </main>
   )
 }

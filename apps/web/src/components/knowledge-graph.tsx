@@ -285,7 +285,7 @@ export function KnowledgeGraph({ recording, connections }: KnowledgeGraphProps) 
 
   if (!mounted) {
     return (
-      <div className="w-full h-[500px] sm:h-[650px] md:h-[800px] rounded-xl border border-white/5 animate-pulse" style={{ background: '#0c0c10' }} />
+      <div style={{ height: '70vh', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', background: '#0c0c10' }} className="animate-pulse" />
     )
   }
 
@@ -298,7 +298,7 @@ export function KnowledgeGraph({ recording, connections }: KnowledgeGraphProps) 
   }
 
   return (
-    <div className="w-full h-[500px] sm:h-[650px] md:h-[800px] rounded-xl border border-white/5 overflow-hidden" style={{ background: '#0c0c10' }}>
+    <div style={{ height: '70vh', overflow: 'hidden', position: 'relative', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', background: '#0c0c10' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -309,8 +309,6 @@ export function KnowledgeGraph({ recording, connections }: KnowledgeGraphProps) 
         fitViewOptions={{ padding: 0.35 }}
         minZoom={0.15}
         maxZoom={2.5}
-        zoomOnScroll={false}
-        preventScrolling={false}
         proOptions={{ hideAttribution: true }}
       >
         <Background
