@@ -42,9 +42,10 @@ const CAT = {
   CREDITS:      { label: 'Credits',      color: '#7cc4a8', bg: 'rgba(124,196,168,0.18)' },
   PERFORMERS:   { label: 'Performers',   color: '#b87dc4', bg: 'rgba(184,125,196,0.18)' },
   GENRES:       { label: 'Genres',       color: '#f0d060', bg: 'rgba(240,208,96,0.18)'  },
+  PRODUCERS:    { label: 'Producers',    color: '#a8c878', bg: 'rgba(168,200,120,0.18)' },
 } as const
 
-const CAT_ORDER = ['SAMPLES_FROM', 'SAMPLED_BY', 'GENRES', 'CREDITS', 'PERFORMERS'] as const
+const CAT_ORDER = ['SAMPLES_FROM', 'SAMPLED_BY', 'PRODUCERS', 'GENRES', 'CREDITS', 'PERFORMERS'] as const
 type CatKey = typeof CAT_ORDER[number]
 
 function getCatKey(type: string): CatKey {
@@ -53,13 +54,14 @@ function getCatKey(type: string): CatKey {
   if (t.includes('sample') && !t.includes('by')) return 'SAMPLES_FROM'
   if (t === 'sampled by' || t.includes('sampled by')) return 'SAMPLED_BY'
   if (t === 'performer' || t.includes('vocal') || t.includes('instrument')) return 'PERFORMERS'
+  if (t === 'producer' || t.includes('produc')) return 'PRODUCERS'
   return 'CREDITS'
 }
 
 // ── Data processing ────────────────────────────────────────────────────────
 
 function buildCategories(connections: Connection[]): CategoryData[] {
-  const maxImp = Math.max(...connections.map(c => c.importance || 1), 1)
+  const maxImp = connections.reduce((m, c) => Math.max(m, c.importance || 1), 1)
   const norm = (imp: number) =>
     Math.max(8, (Math.log1p(imp || 1) / Math.log1p(maxImp)) * 100)
 
