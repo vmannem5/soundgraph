@@ -4,7 +4,7 @@ import * as mb from '@/lib/musicbrainz'
 import { Badge } from '@/components/ui/badge'
 import { GeneratedAvatar } from '@/lib/avatar'
 import { ReleaseGroupCover } from '@/components/release-group-cover'
-import { KnowledgeGraph } from '@/components/knowledge-graph'
+import { ConnectionBubbles } from '@/components/connection-bubbles'
 import { BackButton } from '@/components/back-button'
 import Link from 'next/link'
 
@@ -329,46 +329,43 @@ export default async function ArtistPage({ params }: ArtistPageProps) {
             </section>
           )}
 
-          {/* Connection Mind Map */}
+          {/* Connections */}
           {(topCollaborators.length > 0 || topProducers.length > 0 || samplesFrom.length > 0 || sampledBy.length > 0) && (
             <section>
-              <h2 className="text-xl font-semibold mb-4">Connection Map</h2>
-              <KnowledgeGraph
-                recording={{
-                  id: mbid,
-                  title: artist.name,
-                  spotifyData: heroImageUrl
-                    ? { album: { images: [{ url: heroImageUrl }] } }
-                    : undefined,
-                }}
+              <h2 className="text-xl font-semibold mb-4">Connections</h2>
+              <ConnectionBubbles
                 connections={[
                   ...topCollaborators.slice(0, 8).map((a) => ({
                     type: 'performer',
                     label: `${a.count} collabs`,
-                    targetType: 'artist',
+                    targetType: 'artist' as const,
                     targetId: a.mbid,
                     targetName: a.name,
+                    importance: a.count,
                   })),
                   ...topProducers.slice(0, 6).map((a) => ({
                     type: 'producer',
                     label: `${a.count} productions`,
-                    targetType: 'artist',
+                    targetType: 'artist' as const,
                     targetId: a.mbid,
                     targetName: a.name,
+                    importance: a.count,
                   })),
                   ...samplesFrom.slice(0, 4).map((s) => ({
                     type: 'samples material',
                     label: 'samples',
-                    targetType: 'recording',
+                    targetType: 'recording' as const,
                     targetId: s.rec_mbid,
                     targetName: s.artist_name ? `${s.rec_title} (${s.artist_name})` : s.rec_title,
+                    importance: s.popularity || 1,
                   })),
                   ...sampledBy.slice(0, 4).map((s) => ({
                     type: 'sampled by',
                     label: 'sampled by',
-                    targetType: 'recording',
+                    targetType: 'recording' as const,
                     targetId: s.rec_mbid,
                     targetName: s.artist_name ? `${s.rec_title} (${s.artist_name})` : s.rec_title,
+                    importance: s.popularity || 1,
                   })),
                 ]}
               />

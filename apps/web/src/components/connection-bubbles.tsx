@@ -128,7 +128,7 @@ function buildHierarchy(connections: Connection[]): BubbleData {
       })
     } else {
       const overflow = Math.max(0, conns.length - 12)
-      const leaves = conns.slice(0, 12).map(c => ({
+      const leaves: BubbleData[] = conns.slice(0, 12).map(c => ({
         id: `leaf-${c.targetId}-${c.type}`,
         name: c.targetName,
         targetType: c.targetType,

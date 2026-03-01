@@ -1,5 +1,5 @@
 import { getRecordingConnections } from '@/lib/data-service'
-import { KnowledgeGraph } from '@/components/knowledge-graph'
+import { ConnectionBubbles } from '@/components/connection-bubbles'
 import { RecordingHeader } from '@/components/recording-header'
 import { SpotifyEmbed } from '@/components/spotify-embed'
 import { BackButton } from '@/components/back-button'
@@ -42,10 +42,10 @@ export default async function RecordingPage({ params }: RecordingPageProps) {
         <SpotifyEmbed trackId={spotifyTrackId} />
       )}
 
-      {/* Mind Map — always visible, fixed height so page scrolls past it */}
+      {/* Connections */}
       <section>
-        <h2 className="text-xl font-bold mb-3">Mind Map</h2>
-        <KnowledgeGraph recording={recording} connections={connections} />
+        <h2 className="text-xl font-bold mb-3">Connections</h2>
+        <ConnectionBubbles connections={connections} />
       </section>
 
       {/* Credits */}
