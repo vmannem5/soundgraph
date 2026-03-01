@@ -42,7 +42,7 @@ export function SampleChain({ roots }: Props) {
   return (
     <section>
       <h2 className="text-xl font-bold mb-3">Sample Ancestry</h2>
-      <div className="rounded-xl border border-white/5 bg-[#0c0c10] px-2 py-3">
+      <div className="rounded-xl border border-border bg-card px-2 py-3">
         {roots.map(root => (
           <SampleNodeRow key={root.mbid} node={root} depth={0} />
         ))}
