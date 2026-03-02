@@ -11,6 +11,12 @@ const LEVEL_LABELS: Record<string, string> = {
   family: 'Sound Family', movement: 'Movement', scene: 'Scene', sound: 'Sound', strain: 'Strain',
 }
 
+const sectionHeader: React.CSSProperties = {
+  fontSize: '0.62rem', letterSpacing: '0.2em', textTransform: 'uppercase',
+  color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', fontWeight: 600,
+  borderBottom: '1px solid var(--border)', paddingBottom: '10px', marginBottom: '20px',
+}
+
 export default async function LineagePage({ params }: Props) {
   const { slug } = await params
   const node = await getTaxonomyNode(slug)
@@ -18,12 +24,17 @@ export default async function LineagePage({ params }: Props) {
   if (!node) {
     const families = await getSoundFamilies()
     return (
-      <main className="max-w-4xl mx-auto px-6 py-10">
-        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">← Back to GENUS</Link>
-        <p className="mt-8 text-muted-foreground">Sound Family &ldquo;{slug}&rdquo; not found.</p>
-        <div className="mt-4 flex gap-2 flex-wrap">
+      <main style={{ maxWidth: '900px', margin: '0 auto', padding: '48px 32px' }}>
+        <Link href="/" style={{ fontSize: '0.7rem', color: 'var(--fg-muted)', textDecoration: 'none', letterSpacing: '0.1em' }}>← GENUS</Link>
+        <p style={{ marginTop: '32px', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)' }}>
+          Sound Family &ldquo;{slug}&rdquo; not found.
+        </p>
+        <div style={{ marginTop: '16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
           {families.map(f => (
-            <Link key={f.slug} href={`/lineage/${f.slug}`} className="text-xs px-3 py-1.5 rounded-full border border-border hover:bg-accent">
+            <Link key={f.slug} href={`/lineage/${f.slug}`} style={{
+              fontSize: '0.72rem', padding: '4px 12px', border: '1px solid var(--border)',
+              color: 'var(--fg-muted)', textDecoration: 'none', fontFamily: 'var(--font-syne)',
+            }}>
               {f.name}
             </Link>
           ))}
@@ -46,87 +57,106 @@ export default async function LineagePage({ params }: Props) {
   const childLevel = node.children[0]?.level
 
   return (
-    <main className="max-w-4xl mx-auto px-6 py-10 space-y-8">
+    <main style={{ maxWidth: '900px', margin: '0 auto', padding: '40px 32px 80px' }}>
+
       {/* Breadcrumb */}
-      <nav className="text-sm text-muted-foreground flex items-center gap-1.5 flex-wrap">
-        <Link href="/" className="hover:text-foreground">GENUS</Link>
+      <nav style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
+        <Link href="/" style={{ fontSize: '0.62rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--fg-muted)', textDecoration: 'none', fontFamily: 'var(--font-syne)' }}>GENUS</Link>
         {breadcrumb.map(b => (
-          <span key={b.slug} className="flex items-center gap-1.5">
-            <span>›</span>
-            <Link href={`/lineage/${b.slug}`} className="hover:text-foreground">{b.name}</Link>
+          <span key={b.slug} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ color: 'var(--fg-faint)' }}>›</span>
+            <Link href={`/lineage/${b.slug}`} style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--fg-muted)', textDecoration: 'none', fontFamily: 'var(--font-syne)' }}>{b.name}</Link>
           </span>
         ))}
-        <span>›</span>
-        <span className="font-semibold text-foreground">{node.name}</span>
+        <span style={{ color: 'var(--fg-faint)' }}>›</span>
+        <span style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--fg)', fontFamily: 'var(--font-syne)', fontWeight: 700 }}>{node.name}</span>
       </nav>
 
       {/* Header */}
-      <div>
-        <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">
+      <div style={{ marginBottom: '40px', paddingBottom: '32px', borderBottom: '1px solid var(--border)' }}>
+        <p style={{ fontSize: '0.6rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', fontWeight: 600, marginBottom: '8px' }}>
           {LEVEL_LABELS[node.level] ?? node.level}
-        </div>
-        <h1 className="text-4xl font-black" style={{ color: 'var(--genus-gold)' }}>{node.name}</h1>
-        {node.description && <p className="text-muted-foreground mt-2 max-w-xl">{node.description}</p>}
-        <p className="text-sm text-muted-foreground mt-1">{node.specimenCount} artists</p>
+        </p>
+        <h1 style={{ fontFamily: 'var(--font-cormorant)', fontSize: 'clamp(40px, 6vw, 72px)', fontWeight: 600, letterSpacing: '-0.025em', lineHeight: 0.95, color: 'var(--fg)', marginBottom: '12px' }}>
+          {node.name}
+        </h1>
+        {node.description && (
+          <p style={{ fontSize: '0.85rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', maxWidth: '560px', lineHeight: 1.6 }}>
+            {node.description}
+          </p>
+        )}
+        <p style={{ fontSize: '0.68rem', color: 'var(--fg-faint)', fontFamily: 'var(--font-mono-custom)', marginTop: '8px' }}>
+          {node.specimenCount.toLocaleString()} artists classified
+        </p>
       </div>
 
       {/* Sub-levels */}
       {node.children.length > 0 && (
-        <section>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+        <div style={{ marginBottom: '40px' }}>
+          <p style={sectionHeader}>
             {childLevel ? `${LEVEL_LABELS[childLevel] ?? childLevel}s` : 'Sub-categories'}
-          </h2>
-          <div className="flex flex-wrap gap-2">
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {node.children.map(child => (
-              <Link
-                key={child.slug}
-                href={`/lineage/${child.slug}`}
-                className="rounded-full border border-border px-3 py-1.5 text-sm hover:bg-accent transition-colors"
-              >
-                {child.name}
-                <span className="ml-1.5 text-xs text-muted-foreground">{child.specimenCount}</span>
+              <Link key={child.slug} href={`/lineage/${child.slug}`} style={{ textDecoration: 'none' }}>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'baseline', gap: '6px',
+                  padding: '5px 14px', border: '1px solid var(--border)',
+                  fontSize: '0.78rem', color: 'var(--fg)', fontFamily: 'var(--font-syne)',
+                  transition: 'border-color 0.15s, color 0.15s',
+                }}>
+                  {child.name}
+                  <span style={{ fontSize: '0.6rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-mono-custom)' }}>{child.specimenCount}</span>
+                </span>
               </Link>
             ))}
           </div>
-        </section>
+        </div>
       )}
 
-      {/* Artists */}
-      <section>
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">Artists</h2>
+      {/* Artists grid */}
+      <div>
+        <p style={sectionHeader}>Artists — sorted by influence</p>
         {artists.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No artists classified here yet.</p>
+          <p style={{ color: 'var(--fg-muted)', fontSize: '0.85rem', fontFamily: 'var(--font-syne)' }}>No artists classified here yet.</p>
         ) : (
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '24px 16px' }}>
             {artists.map((artist, i) => (
-              <Link
-                key={artist.mbid}
-                href={`/artist/${artist.mbid}`}
-                className="flex flex-col items-center gap-2 group"
-              >
-                <div className="w-16 h-16 rounded-full overflow-hidden bg-muted ring-2 ring-transparent group-hover:ring-[var(--genus-gold)] transition-all">
+              <Link key={artist.mbid} href={`/artist/${artist.mbid}`} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '64px', height: '64px', borderRadius: '50%', overflow: 'hidden',
+                  border: i < 3 ? '2px solid var(--gold)' : '1px solid var(--border)',
+                  background: 'var(--bg-3)', flexShrink: 0,
+                  transition: 'border-color 0.2s',
+                }}>
                   {artist.imageUrl ? (
-                    <img src={artist.imageUrl} alt={artist.name} className="w-full h-full object-cover" />
+                    <img src={artist.imageUrl} alt={artist.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
-                    <div
-                      className="w-full h-full flex items-center justify-center text-lg font-bold"
-                      style={{ background: `oklch(30% 0.05 ${(artist.name.charCodeAt(0) * 37) % 360})`, color: `oklch(75% 0.18 ${(artist.name.charCodeAt(0) * 37) % 360})` }}
-                    >
+                    <div style={{
+                      width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontFamily: 'var(--font-cormorant)', fontWeight: 600, fontSize: '1.4rem',
+                      color: `oklch(70% 0.15 ${(artist.name.charCodeAt(0) * 47) % 360})`,
+                      background: `oklch(20% 0.04 ${(artist.name.charCodeAt(0) * 47) % 360})`,
+                    }}>
                       {artist.name.charAt(0)}
                     </div>
                   )}
                 </div>
-                <div className="text-xs font-medium text-center truncate w-full group-hover:text-primary transition-colors">{artist.name}</div>
-                {i < 3 && (
-                  <div className="text-xs text-muted-foreground -mt-1" style={{ color: 'var(--genus-gold)', opacity: 0.7 }}>
-                    #{i + 1} influence
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--fg)', fontFamily: 'var(--font-syne)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '96px' }}>
+                    {artist.name}
                   </div>
-                )}
+                  {i < 3 && (
+                    <div style={{ fontSize: '0.58rem', color: 'var(--gold)', fontFamily: 'var(--font-syne)', marginTop: '2px', letterSpacing: '0.05em' }}>
+                      #{i + 1} influence
+                    </div>
+                  )}
+                </div>
               </Link>
             ))}
           </div>
         )}
-      </section>
+      </div>
     </main>
   )
 }

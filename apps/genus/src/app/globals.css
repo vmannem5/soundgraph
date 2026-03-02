@@ -9,6 +9,7 @@
 /* ── Fonts ──────────────────────────────────────────────────────────────── */
 /* Cormorant Garamond loaded via layout.tsx */
 
+/* Dark (default) */
 :root {
   --bg:           #0a0908;
   --bg-2:         #111009;
@@ -22,6 +23,7 @@
   --gold-bright:  #e2b55a;
   --gold-dim:     rgba(196, 147, 63, 0.18);
 
+  color-scheme: dark;
   --background:       var(--bg);
   --foreground:       var(--fg);
   --muted:            var(--bg-3);
@@ -63,6 +65,22 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Light theme */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg:           #F4F1EB;
+  --bg-2:         #EDE9E1;
+  --bg-3:         #E5E0D6;
+  --fg:           #1a1710;
+  --fg-muted:     #7a7263;
+  --fg-faint:     #c0b9ae;
+  --border:       #D6D0C4;
+  --border-light: #C8C2B4;
+  --gold:         #9a6e1e;
+  --gold-bright:  #c4933f;
+  --gold-dim:     rgba(154, 110, 30, 0.12);
 }
 
 /* ── Typography ─────────────────────────────────────────────────────────── */
