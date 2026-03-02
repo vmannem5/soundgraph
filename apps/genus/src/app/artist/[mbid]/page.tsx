@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { getSpecimenDetail, getArtistHybridData } from '@/lib/data-service'
 import { SoundProfileRadar } from '@/components/sound-profile-radar'
 import { ReleaseTimeline } from '@/components/release-timeline'
+import { ConnectionBubbles, type Connection } from '@/components/connection-bubbles'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,7 +81,7 @@ export default async function ArtistPage({ params }: Props) {
                 </span>
               ))}
             </div>
-            <h1 style={{ fontFamily: 'var(--font-cormorant)', fontSize: 'clamp(36px, 6vw, 64px)', fontWeight: 600, letterSpacing: '-0.025em', lineHeight: 0.95, color: 'var(--fg)', marginBottom: '8px' }}>
+            <h1 style={{ fontFamily: 'var(--font-cormorant)', fontSize: 'clamp(26px, 3.5vw, 44px)', fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.0, color: 'var(--fg)', marginBottom: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {specimen.name}
             </h1>
             {(specimen.type || specimen.country) && (
@@ -188,7 +189,54 @@ export default async function ArtistPage({ params }: Props) {
           </div>
         </div>
 
-        {/* ── Connections ───────────────────────────────────────────── */}
+        {/* ── Mind Map ─────────────────────────────────────────────── */}
+        {(hybrid.collaborators.length > 0 || hybrid.samplesFrom.length > 0 || hybrid.sampledBy.length > 0 || specimen.tags.length > 0) && (() => {
+          const connections: Connection[] = [
+            ...hybrid.collaborators.slice(0, 8).map(a => ({
+              type: 'performer',
+              label: `${a.count} tracks`,
+              targetType: 'artist' as const,
+              targetId: a.mbid,
+              targetName: a.name,
+              importance: a.count,
+            })),
+            ...hybrid.samplesFrom.slice(0, 4).map(r => ({
+              type: 'samples material',
+              label: 'samples',
+              targetType: 'recording' as const,
+              targetId: r.mbid,
+              targetName: r.artistName ? `${r.title} (${r.artistName})` : r.title,
+              importance: 1,
+            })),
+            ...hybrid.sampledBy.slice(0, 4).map(r => ({
+              type: 'sampled by',
+              label: 'sampled by',
+              targetType: 'recording' as const,
+              targetId: r.mbid,
+              targetName: r.artistName ? `${r.title} (${r.artistName})` : r.title,
+              importance: 1,
+            })),
+            ...specimen.tags.slice(0, 10).map(t => ({
+              type: 'genre' as const,
+              label: t.tag,
+              targetType: 'tag' as const,
+              targetId: t.tag,
+              targetName: t.tag,
+              importance: t.count,
+            })),
+          ]
+          return (
+            <div>
+              <hr style={S.rule} />
+              <div style={{ marginTop: '40px' }}>
+                <p style={S.sectionHeader}>Connections</p>
+                <ConnectionBubbles connections={connections} />
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ── Connection Details ────────────────────────────────────── */}
         {(hybrid.collaborators.length > 0 || hybrid.samplesFrom.length > 0 || hybrid.sampledBy.length > 0) && (
           <div>
             <hr style={S.rule} />
