@@ -285,6 +285,41 @@ export async function getFeaturedSpecimens(): Promise<SpecimenSummary[]> {
   }))
 }
 
+/** Returns top N artists per Sound Family — used for homepage family row previews */
+export async function getArtistsPerFamily(perFamily = 5): Promise<Map<string, SpecimenSummary[]>> {
+  const rows = await prisma.$queryRaw<Array<{
+    famSlug: string
+    mbid: string
+    name: string
+    imageUrl: string | null
+    rn: bigint
+  }>>`
+    SELECT famSlug, mbid, name, "imageUrl", rn FROM (
+      SELECT
+        gt.slug AS "famSlug",
+        a.mbid, a.name, a."imageUrl",
+        ROW_NUMBER() OVER (PARTITION BY gt.id ORDER BY a.popularity DESC NULLS LAST) AS rn
+      FROM "SpecimenClassification" sc
+      JOIN "Artist" a ON a.mbid = sc."entityMbid"
+      JOIN "GenreTaxonomy" gt ON gt.id = sc."taxonomyId" AND gt.level = 'family'
+      WHERE sc."entityType" = 'artist'
+        AND a."imageUrl" IS NOT NULL
+    ) sub
+    WHERE rn <= ${perFamily}
+    ORDER BY "famSlug", rn
+  `.catch(() => [])
+
+  const map = new Map<string, SpecimenSummary[]>()
+  for (const r of rows) {
+    if (!map.has(r.famSlug)) map.set(r.famSlug, [])
+    map.get(r.famSlug)!.push({
+      mbid: r.mbid, name: r.name, country: null, type: null,
+      imageUrl: r.imageUrl, primaryFamily: null, primaryFamilySlug: r.famSlug, lineage: [],
+    })
+  }
+  return map
+}
+
 // ── Hybrid data (SoundGraph artist connections) ────────────────────────────
 
 export interface HybridData {
