@@ -287,6 +287,7 @@ export async function getFeaturedSpecimens(): Promise<SpecimenSummary[]> {
 
 /** Returns top N artists per Sound Family — used for homepage family row previews */
 export async function getArtistsPerFamily(perFamily = 5): Promise<Map<string, SpecimenSummary[]>> {
+  const n = Math.max(1, Math.min(20, Math.floor(perFamily)))
   const rows = await prisma.$queryRaw<Array<{
     famSlug: string
     mbid: string
@@ -305,7 +306,7 @@ export async function getArtistsPerFamily(perFamily = 5): Promise<Map<string, Sp
       WHERE sc."entityType" = 'artist'
         AND a."imageUrl" IS NOT NULL
     ) sub
-    WHERE rn <= ${perFamily}
+    WHERE rn <= ${n}
     ORDER BY "famSlug", rn
   `.catch(() => [])
 

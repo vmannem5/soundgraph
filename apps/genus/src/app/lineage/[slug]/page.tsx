@@ -45,12 +45,15 @@ export default async function LineagePage({ params }: Props) {
 
   const artists = await getSpecimensForTaxonomy(node.id)
 
-  // Enrich images for artists missing imageUrl (fetch from web app Spotify API)
+  const WEB_URL = process.env.WEB_APP_URL ?? 'http://localhost:3000'
+
+  // Enrich images for top 8 artists missing imageUrl (cap to avoid N+1 fan-out)
   const enriched = await Promise.all(
-    artists.map(async a => {
+    artists.map(async (a, i) => {
       if (a.imageUrl) return a
+      if (i >= 8) return a  // only enrich top 8 to limit SSR HTTP fan-out
       try {
-        const res = await fetch(`http://localhost:3000/api/artist/${a.mbid}`, {
+        const res = await fetch(`${WEB_URL}/api/artist/${a.mbid}`, {
           next: { revalidate: 86400 },
           headers: { 'User-Agent': 'MusicGenus/internal' },
         })

@@ -1,7 +1,10 @@
 import Link from 'next/link'
 import { getSpecimenDetail, getArtistHybridData } from '@/lib/data-service'
 import { SoundProfileRadar } from '@/components/sound-profile-radar'
-import { ReleaseTimeline } from '@/components/release-timeline'
+import { ReleaseTimeline, isSkippable } from '@/components/release-timeline'
+
+const MBID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const WEB_URL = process.env.WEB_APP_URL ?? 'http://localhost:3000'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,12 +21,6 @@ const FAMILY_HUE_MAP: Record<string, number> = {
   'electronic': 270, 'rnb-soul': 320, 'folk-country': 100,
 }
 
-function isSkippable(rg: { title: string; 'secondary-types'?: string[] }): boolean {
-  const secondaryTypes = (rg['secondary-types'] ?? []).map((t: string) => t.toLowerCase())
-  if (secondaryTypes.some((t: string) => ['remix', 'live', 'compilation', 'mixtape/street', 'demo', 'dj-mix'].includes(t))) return true
-  if (/\b(remix|remixed|remixes|deluxe|remaster|remastered|anniversary|re-issue|reissue|live|bonus|expanded|edition|version)\b/i.test(rg.title)) return true
-  return false
-}
 
 const S = {
   sectionHeader: { fontSize: '0.62rem', letterSpacing: '0.2em', textTransform: 'uppercase' as const, color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', fontWeight: 600 as const, borderBottom: '1px solid var(--border)', paddingBottom: '10px', marginBottom: '16px' },
@@ -34,7 +31,7 @@ const S = {
 /** Fetch Spotify image from web app API (same server, instant) when DB imageUrl is null */
 async function getSpotifyImage(mbid: string): Promise<string | null> {
   try {
-    const res = await fetch(`http://localhost:3000/api/artist/${mbid}`, {
+    const res = await fetch(`${WEB_URL}/api/artist/${mbid}`, {
       next: { revalidate: 86400 },
       headers: { 'User-Agent': 'MusicGenus/internal' },
     })
@@ -48,6 +45,18 @@ async function getSpotifyImage(mbid: string): Promise<string | null> {
 
 export default async function ArtistPage({ params }: Props) {
   const { mbid } = await params
+  // Validate MBID to prevent URL parameter injection
+  if (!MBID_RE.test(mbid)) {
+    return (
+      <main className="g-page">
+        <div style={{ padding: '48px 0' }}>
+          <Link href="/" style={{ fontSize: '0.7rem', color: 'var(--fg-muted)', textDecoration: 'none' }}>← GENUS</Link>
+          <p style={{ marginTop: '32px', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)' }}>Invalid artist ID.</p>
+        </div>
+      </main>
+    )
+  }
+
   const [specimen, hybrid] = await Promise.all([
     getSpecimenDetail(mbid),
     getArtistHybridData(mbid),
@@ -267,7 +276,7 @@ export default async function ArtistPage({ params }: Props) {
 
 async function ReleasesSection({ mbid, familyHue }: { mbid: string; familyHue: number }) {
   const allRgs = await fetch(
-    `https://musicbrainz.org/ws/2/release-group?artist=${mbid}&limit=25&fmt=json`,
+    `https://musicbrainz.org/ws/2/release-group?artist=${mbid}&limit=100&fmt=json`,
     { headers: { 'User-Agent': 'MusicGenus/0.1.0 (musicgenus.com)' }, next: { revalidate: 86400 } }
   )
     .then(r => r.ok ? r.json() : null)
