@@ -10,11 +10,7 @@ interface Props {
 }
 
 const LEVEL_LABELS: Record<string, string> = {
-  family: 'Sound Family',
-  movement: 'Movement',
-  scene: 'Scene',
-  sound: 'Sound',
-  strain: 'Strain',
+  family: 'Sound Family', movement: 'Movement', scene: 'Scene', sound: 'Sound', strain: 'Strain',
 }
 
 const FAMILY_HUE_MAP: Record<string, number> = {
@@ -29,6 +25,13 @@ function isSkippable(rg: { title: string; 'secondary-types'?: string[] }): boole
   return false
 }
 
+const S = {
+  page: { maxWidth: '900px', margin: '0 auto', padding: '0 32px 80px' } as React.CSSProperties,
+  sectionHeader: { fontSize: '0.62rem', letterSpacing: '0.2em', textTransform: 'uppercase' as const, color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', fontWeight: 600 as const, borderBottom: '1px solid var(--border)', paddingBottom: '10px', marginBottom: '16px' },
+  rule: { border: 'none', borderTop: '1px solid var(--border)', margin: '40px 0 0' } as React.CSSProperties,
+  mono: { fontFamily: 'var(--font-mono-custom)', fontSize: '0.68rem', color: 'var(--fg-muted)' } as React.CSSProperties,
+}
+
 export default async function ArtistPage({ params }: Props) {
   const { mbid } = await params
   const [specimen, hybrid] = await Promise.all([
@@ -38,220 +41,203 @@ export default async function ArtistPage({ params }: Props) {
 
   if (!specimen) {
     return (
-      <main className="max-w-4xl mx-auto px-6 py-16">
-        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-          ← Back to GENUS
-        </Link>
-        <p className="mt-8 text-muted-foreground">
-          Artist not found in GENUS classification system.
-        </p>
-        <p className="text-xs text-muted-foreground mt-1">MBID: {mbid}</p>
+      <main style={S.page}>
+        <div style={{ padding: '48px 0' }}>
+          <Link href="/" style={{ fontSize: '0.7rem', color: 'var(--fg-muted)', letterSpacing: '0.1em', textDecoration: 'none' }}>← GENUS</Link>
+          <p style={{ marginTop: '32px', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)' }}>Artist not found.</p>
+        </div>
       </main>
     )
   }
 
+  const familyHue = FAMILY_HUE_MAP[specimen.primaryFamilySlug ?? ''] ?? 60
+
   return (
-    <main className="min-h-screen">
-      {/* Hero */}
-      <div className="relative w-full overflow-hidden" style={{ minHeight: '220px' }}>
-        {specimen.imageUrl ? (
+    <main style={{ minHeight: '100vh' }}>
+
+      {/* ── Hero ─────────────────────────────────────────────────────── */}
+      <div style={{ position: 'relative', overflow: 'hidden' }}>
+        {specimen.imageUrl && (
           <>
-            <img
-              src={specimen.imageUrl}
-              alt=""
-              aria-hidden="true"
-              className="absolute inset-0 w-full h-full object-cover"
-              style={{ filter: 'blur(40px)', transform: 'scale(1.15)', opacity: 0.35 }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/60 to-background" />
+            <img src={specimen.imageUrl} alt="" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(60px)', transform: 'scale(1.2)', opacity: 0.2 }} />
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 0%, var(--bg) 100%)' }} />
           </>
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-b from-neutral-900 to-background" />
         )}
-        <div className="relative z-10 max-w-5xl mx-auto px-6 pt-6 pb-8 flex items-end gap-6">
-          {/* Artist photo */}
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: '900px', margin: '0 auto', padding: '40px 32px 36px', display: 'flex', gap: '28px', alignItems: 'flex-end' }}>
           {specimen.imageUrl && (
-            <div className="shrink-0 rounded-full overflow-hidden ring-4 ring-white/20 shadow-2xl bg-neutral-800" style={{ width: 100, height: 100 }}>
-              <img src={specimen.imageUrl} alt={specimen.name} className="w-full h-full object-cover" />
+            <div style={{ width: '88px', height: '88px', borderRadius: '50%', overflow: 'hidden', border: '1px solid var(--border-light)', flexShrink: 0, background: 'var(--bg-3)' }}>
+              <img src={specimen.imageUrl} alt={specimen.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
           )}
-          <div className="flex flex-col gap-1 pb-1">
-            <nav className="text-sm text-white/60 flex items-center gap-1.5 flex-wrap">
-              <Link href="/" className="hover:text-white">GENUS</Link>
-              {specimen.lineage.map((segment, i) => (
-                <span key={i} className="flex items-center gap-1.5">
-                  <span>›</span>
-                  <span className="text-white/50">{segment}</span>
+          <div>
+            {/* Breadcrumb */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <Link href="/" style={{ fontSize: '0.62rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--fg-muted)', textDecoration: 'none', fontFamily: 'var(--font-syne)' }}>GENUS</Link>
+              {specimen.lineage.map((seg, i) => (
+                <span key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: 'var(--fg-faint)' }}>›</span>
+                  <span style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)' }}>{seg}</span>
                 </span>
               ))}
-            </nav>
-            <h1 className="text-4xl font-black text-white drop-shadow-lg">{specimen.name}</h1>
-            {specimen.type && <div className="text-sm text-white/60">{specimen.type}{specimen.country ? ` · ${specimen.country}` : ''}</div>}
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-10">
-      {/* 3-column layout */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-
-        {/* Left: Classification */}
-        <aside className="space-y-6">
-          {specimen.classifications.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Lineage</div>
-              {specimen.classifications.map(c => (
-                <Link
-                  key={c.taxonomyId}
-                  href={`/lineage/${c.slug}`}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 border border-border hover:bg-accent transition-colors"
-                >
-                  <div className="text-xs text-muted-foreground w-20 shrink-0">{LEVEL_LABELS[c.level] ?? c.level}</div>
-                  <div className="text-sm font-medium">{c.name}</div>
-                </Link>
-              ))}
             </div>
-          )}
-
-          {specimen.tags.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Sound Signature</div>
-              <div className="flex flex-wrap gap-1.5">
-                {specimen.tags.slice(0, 8).map(t => (
-                  <span key={t.tag} className="px-2 py-0.5 rounded-full text-xs border border-border text-muted-foreground">
-                    {t.tag}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </aside>
-
-        {/* Center: Radar */}
-        <div className="flex flex-col items-center gap-4">
-          <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground text-center">Sound Profile</div>
-          {specimen.soundProfile ? (
-            <SoundProfileRadar values={specimen.soundProfile} />
-          ) : (
-            <div className="w-full aspect-square rounded-xl border border-border flex items-center justify-center">
-              <p className="text-xs text-muted-foreground text-center px-4">
-                Sound Profile not computed yet.
+            <h1 style={{ fontFamily: 'var(--font-cormorant)', fontSize: 'clamp(36px, 6vw, 64px)', fontWeight: 600, letterSpacing: '-0.025em', lineHeight: 0.95, color: 'var(--fg)', marginBottom: '8px' }}>
+              {specimen.name}
+            </h1>
+            {(specimen.type || specimen.country) && (
+              <p style={{ fontSize: '0.75rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', letterSpacing: '0.05em' }}>
+                {[specimen.type, specimen.country].filter(Boolean).join(' · ')}
               </p>
-            </div>
-          )}
-        </div>
-
-        {/* Right: Origins + Related */}
-        <aside className="space-y-6">
-          <div className="space-y-2">
-            <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Origins</div>
-            <div className="rounded-lg border border-border bg-card p-4 space-y-2 text-sm">
-              {specimen.country && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Geography</span>
-                  <span>{specimen.country}</span>
-                </div>
-              )}
-              {specimen.primaryFamily && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Sound Family</span>
-                  <Link href={`/lineage/${specimen.primaryFamilySlug}`} style={{ color: 'var(--genus-gold)' }}>
-                    {specimen.primaryFamily}
-                  </Link>
-                </div>
-              )}
-            </div>
+            )}
           </div>
-
-          {specimen.relatedSpecimens.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Related Artists</div>
-              <div className="space-y-1">
-                {specimen.relatedSpecimens.map(rel => (
-                  <Link
-                    key={rel.mbid}
-                    href={`/artist/${rel.mbid}`}
-                    className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-accent transition-colors group"
-                  >
-                    <span className="text-sm font-medium group-hover:text-primary transition-colors">{rel.name}</span>
-                    {rel.primaryFamily && <span className="text-xs text-muted-foreground">{rel.primaryFamily}</span>}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-
-        </aside>
+        </div>
+        <hr style={{ ...S.rule, margin: 0 }} />
       </div>
 
-      {/* Hybrid sections — SoundGraph connection data */}
-      {(hybrid.collaborators.length > 0 || hybrid.samplesFrom.length > 0 || hybrid.sampledBy.length > 0) && (
-        <div className="border-t border-border pt-8 space-y-8">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Connections
-          </h2>
+      <div style={S.page}>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
-            {/* Collaborators */}
-            {hybrid.collaborators.length > 0 && (
-              <div className="space-y-3">
-                <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  Top Collaborators
-                </div>
-                <div className="space-y-1">
-                  {hybrid.collaborators.map(a => (
-                    <Link
-                      key={a.mbid}
-                      href={`/artist/${a.mbid}`}
-                      className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-accent transition-colors group"
-                    >
-                      <span className="text-sm font-medium group-hover:text-primary transition-colors truncate">{a.name}</span>
-                      <span className="text-xs text-muted-foreground shrink-0 ml-2">{a.count} tracks</span>
+        {/* ── Classification + Radar + Origins ─────────────────────── */}
+        <div style={{ marginTop: '40px', display: 'grid', gridTemplateColumns: '1fr 1.1fr 1fr', gap: '40px', alignItems: 'start' }}>
+
+          {/* Left: Lineage + Sound Signature */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+            {specimen.classifications.length > 0 && (
+              <div>
+                <p style={S.sectionHeader}>Lineage</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  {specimen.classifications.map(c => (
+                    <Link key={c.taxonomyId} href={`/lineage/${c.slug}`} style={{ textDecoration: 'none', display: 'flex', alignItems: 'baseline', gap: '12px', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: '0.6rem', color: 'var(--fg-faint)', fontFamily: 'var(--font-syne)', letterSpacing: '0.12em', textTransform: 'uppercase', width: '72px', flexShrink: 0 }}>
+                        {LEVEL_LABELS[c.level] ?? c.level}
+                      </span>
+                      <span style={{ fontFamily: 'var(--font-cormorant)', fontSize: '1.1rem', fontWeight: 600, color: 'var(--fg)', letterSpacing: '-0.01em' }}>
+                        {c.name}
+                      </span>
                     </Link>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Sampled from */}
-            {hybrid.samplesFrom.length > 0 && (
-              <div className="space-y-3">
-                <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  Sampled From
-                </div>
-                <div className="space-y-1">
-                  {hybrid.samplesFrom.map(r => (
-                    <div key={r.mbid} className="px-3 py-2 rounded-lg border border-border/50">
-                      <div className="text-sm font-medium truncate">{r.title}</div>
-                      {r.artistName && <div className="text-xs text-muted-foreground truncate">{r.artistName}</div>}
-                    </div>
+            {specimen.tags.length > 0 && (
+              <div>
+                <p style={S.sectionHeader}>Sound Signature</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {specimen.tags.slice(0, 8).map(t => (
+                    <span key={t.tag} style={{ fontSize: '0.68rem', padding: '3px 10px', border: '1px solid var(--border)', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', letterSpacing: '0.03em' }}>
+                      {t.tag}
+                    </span>
                   ))}
                 </div>
               </div>
             )}
+          </div>
 
-            {/* Sampled by */}
-            {hybrid.sampledBy.length > 0 && (
-              <div className="space-y-3">
-                <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  Sampled By
-                </div>
-                <div className="space-y-1">
-                  {hybrid.sampledBy.map(r => (
-                    <div key={r.mbid} className="px-3 py-2 rounded-lg border border-border/50">
-                      <div className="text-sm font-medium truncate">{r.title}</div>
-                      {r.artistName && <div className="text-xs text-muted-foreground truncate">{r.artistName}</div>}
-                    </div>
+          {/* Center: Sound Profile radar */}
+          <div>
+            <p style={{ ...S.sectionHeader, textAlign: 'center' }}>Sound Profile</p>
+            {specimen.soundProfile ? (
+              <SoundProfileRadar values={specimen.soundProfile} />
+            ) : (
+              <div style={{ border: '1px solid var(--border)', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <p style={{ fontSize: '0.75rem', color: 'var(--fg-muted)', textAlign: 'center', padding: '20px', fontFamily: 'var(--font-syne)' }}>
+                  Sound Profile not yet computed.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Right: Origins + Related */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+            <div>
+              <p style={S.sectionHeader}>Origins</p>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <tbody>
+                  {specimen.country && (
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '8px 0', fontSize: '0.72rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)' }}>Geography</td>
+                      <td style={{ padding: '8px 0', fontSize: '0.72rem', color: 'var(--fg)', fontFamily: 'var(--font-mono-custom)', textAlign: 'right' }}>{specimen.country}</td>
+                    </tr>
+                  )}
+                  {specimen.primaryFamily && (
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '8px 0', fontSize: '0.72rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)' }}>Sound Family</td>
+                      <td style={{ padding: '8px 0', textAlign: 'right' }}>
+                        <Link href={`/lineage/${specimen.primaryFamilySlug}`} style={{ fontSize: '0.72rem', color: 'var(--gold)', textDecoration: 'none', fontFamily: 'var(--font-syne)', fontWeight: 600 }}>
+                          {specimen.primaryFamily}
+                        </Link>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {specimen.relatedSpecimens.length > 0 && (
+              <div>
+                <p style={S.sectionHeader}>Related Artists</p>
+                <div>
+                  {specimen.relatedSpecimens.map(rel => (
+                    <Link key={rel.mbid} href={`/artist/${rel.mbid}`} style={{ textDecoration: 'none', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: '0.82rem', color: 'var(--fg)', fontFamily: 'var(--font-syne)', fontWeight: 500 }}>{rel.name}</span>
+                      {rel.primaryFamily && <span style={{ fontSize: '0.6rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', letterSpacing: '0.08em' }}>{rel.primaryFamily}</span>}
+                    </Link>
                   ))}
                 </div>
               </div>
             )}
           </div>
         </div>
-      )}
 
-      {/* Releases: Timeline + Discography */}
-      <ReleasesSection mbid={mbid} familyHue={FAMILY_HUE_MAP[specimen.primaryFamilySlug ?? ''] ?? 60} />
+        {/* ── Connections ───────────────────────────────────────────── */}
+        {(hybrid.collaborators.length > 0 || hybrid.samplesFrom.length > 0 || hybrid.sampledBy.length > 0) && (
+          <div>
+            <hr style={S.rule} />
+            <div style={{ marginTop: '40px' }}>
+              <p style={S.sectionHeader}>Connections</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '40px' }}>
+
+                {hybrid.collaborators.length > 0 && (
+                  <div>
+                    <p style={{ fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--fg-faint)', fontFamily: 'var(--font-syne)', fontWeight: 600, marginBottom: '12px' }}>Top Collaborators</p>
+                    {hybrid.collaborators.map((a, i) => (
+                      <Link key={a.mbid} href={`/artist/${a.mbid}`} style={{ textDecoration: 'none', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
+                        <span style={{ fontSize: '0.82rem', color: 'var(--fg)', fontFamily: 'var(--font-syne)' }}>{a.name}</span>
+                        <span style={{ ...S.mono, fontSize: '0.62rem' }}>{a.count}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+
+                {hybrid.samplesFrom.length > 0 && (
+                  <div>
+                    <p style={{ fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--fg-faint)', fontFamily: 'var(--font-syne)', fontWeight: 600, marginBottom: '12px' }}>Sampled From</p>
+                    {hybrid.samplesFrom.map(r => (
+                      <div key={r.mbid} style={{ padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: '0.82rem', color: 'var(--fg)', fontFamily: 'var(--font-syne)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                        {r.artistName && <div style={{ fontSize: '0.65rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', marginTop: '1px' }}>{r.artistName}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {hybrid.sampledBy.length > 0 && (
+                  <div>
+                    <p style={{ fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--fg-faint)', fontFamily: 'var(--font-syne)', fontWeight: 600, marginBottom: '12px' }}>Sampled By</p>
+                    {hybrid.sampledBy.map(r => (
+                      <div key={r.mbid} style={{ padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: '0.82rem', color: 'var(--fg)', fontFamily: 'var(--font-syne)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                        {r.artistName && <div style={{ fontSize: '0.65rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', marginTop: '1px' }}>{r.artistName}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Releases ─────────────────────────────────────────────── */}
+        <ReleasesSection mbid={mbid} familyHue={familyHue} />
 
       </div>
     </main>
@@ -270,30 +256,42 @@ async function ReleasesSection({ mbid, familyHue }: { mbid: string; familyHue: n
   const clean = allRgs.filter(rg => !isSkippable(rg))
   if (!clean.length) return null
 
+  const sectionHeader: React.CSSProperties = {
+    fontSize: '0.62rem', letterSpacing: '0.2em', textTransform: 'uppercase',
+    color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', fontWeight: 600,
+    borderBottom: '1px solid var(--border)', paddingBottom: '10px', marginBottom: '20px',
+  }
+
   return (
-    <div className="space-y-8">
+    <div>
       {/* Timeline */}
-      <div className="border-t border-border pt-8 space-y-4">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Release Timeline</h2>
+      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '40px 0 0' }} />
+      <div style={{ marginTop: '40px', marginBottom: '40px' }}>
+        <p style={sectionHeader}>Release Timeline</p>
         <ReleaseTimeline releaseGroups={allRgs} familyHue={familyHue} />
       </div>
 
-      {/* Album art grid (clean only) */}
-      <div className="border-t border-border pt-8 space-y-4">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Discography</h2>
-        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
+      {/* Discography */}
+      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '0 0 40px' }} />
+      <div>
+        <p style={sectionHeader}>Discography</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '16px' }}>
           {clean.map(rg => (
-            <div key={rg.id} className="space-y-1">
-              <div className="aspect-square rounded-lg overflow-hidden bg-muted">
+            <div key={rg.id}>
+              <div style={{ aspectRatio: '1', background: 'var(--bg-3)', overflow: 'hidden', border: '1px solid var(--border)', marginBottom: '8px' }}>
                 <img
                   src={`https://coverartarchive.org/release-group/${rg.id}/front-250`}
                   alt={rg.title}
-                  className="w-full h-full object-cover"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               </div>
-              <div className="text-xs font-medium truncate">{rg.title}</div>
+              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--fg)', fontFamily: 'var(--font-syne)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {rg.title}
+              </div>
               {rg['first-release-date'] && (
-                <div className="text-xs text-muted-foreground">{rg['first-release-date'].slice(0, 4)}</div>
+                <div style={{ fontSize: '0.6rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-mono-custom)', marginTop: '2px' }}>
+                  {rg['first-release-date'].slice(0, 4)}
+                </div>
               )}
             </div>
           ))}
