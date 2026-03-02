@@ -199,15 +199,18 @@ export async function getSpecimenDetail(mbid: string): Promise<SpecimenDetail | 
   }
 }
 
-export async function getSpecimensForTaxonomy(taxonomyId: string): Promise<Array<{ mbid: string; name: string; country: string | null }>> {
-  return prisma.$queryRaw<Array<{ mbid: string; name: string; country: string | null }>>`
-    SELECT a.mbid, a.name, a.country
+export async function getSpecimensForTaxonomy(taxonomyId: string): Promise<Array<{ mbid: string; name: string; country: string | null; imageUrl: string | null; influenceScore: number }>> {
+  return prisma.$queryRaw<Array<{ mbid: string; name: string; country: string | null; imageUrl: string | null; influenceScore: number }>>`
+    SELECT
+      a.mbid, a.name, a.country, a."imageUrl",
+      COALESCE(sp."sampleUse", 0) + COALESCE(sp."collaborationRadius", 0) AS "influenceScore"
     FROM "SpecimenClassification" sc
     JOIN "Artist" a ON a.mbid = sc."entityMbid"
+    LEFT JOIN "SoundProfile" sp ON sp."entityMbid" = a.mbid
     WHERE sc."taxonomyId" = ${taxonomyId}
       AND sc."entityType" = 'artist'
-    ORDER BY a.popularity DESC NULLS LAST
-    LIMIT 20
+    ORDER BY "influenceScore" DESC, a.popularity DESC NULLS LAST
+    LIMIT 24
   `.catch(() => [])
 }
 
@@ -255,12 +258,13 @@ export async function getFeaturedSpecimens(): Promise<SpecimenSummary[]> {
     name: string
     country: string | null
     type: string | null
+    imageUrl: string | null
     famName: string
     famSlug: string
   }>>`
     SELECT DISTINCT ON (sc."taxonomyId")
       sc."taxonomyId" AS "famId",
-      a.mbid, a.name, a.country, a.type,
+      a.mbid, a.name, a.country, a.type, a."imageUrl",
       gt.name AS "famName", gt.slug AS "famSlug"
     FROM "SpecimenClassification" sc
     JOIN "Artist" a ON a.mbid = sc."entityMbid"
@@ -274,6 +278,7 @@ export async function getFeaturedSpecimens(): Promise<SpecimenSummary[]> {
     name: r.name,
     country: r.country,
     type: r.type,
+    imageUrl: r.imageUrl ?? null,
     primaryFamily: r.famName,
     primaryFamilySlug: r.famSlug,
     lineage: [r.famName],

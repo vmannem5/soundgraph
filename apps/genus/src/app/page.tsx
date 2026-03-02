@@ -35,14 +35,14 @@ export default async function HomePage() {
           GENUS
         </h1>
         <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-          Every sound has a lineage. Classify the specimen. Trace the strain.
+          Every sound has a lineage. Discover artists. Trace the lineage.
         </p>
         <form action="/search" method="get" className="mt-6">
           <div className="flex gap-2 max-w-md mx-auto">
             <input
               name="q"
               type="text"
-              placeholder="Search specimens…"
+              placeholder="Search artists…"
               className="flex-1 rounded-lg border border-border bg-card px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--genus-gold)]"
             />
             <button
@@ -81,7 +81,7 @@ export default async function HomePage() {
                     {fam.name}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {fam.specimenCount} specimens
+                    {fam.specimenCount} artists
                   </div>
                   {fam.description && (
                     <div className="text-xs text-muted-foreground/70 leading-relaxed line-clamp-2">
@@ -95,26 +95,40 @@ export default async function HomePage() {
         )}
       </section>
 
-      {/* Featured Specimens */}
+      {/* Featured Artists */}
       {featured.length > 0 && (
         <section>
           <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-6">
-            Featured Specimens
+            Featured Artists
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
             {featured.map(spec => {
               const c = familyColor(spec.primaryFamilySlug ?? '')
               return (
                 <Link
                   key={spec.mbid}
-                  href={`/specimen/${spec.mbid}`}
-                  className="rounded-lg p-3 border flex flex-col gap-1.5 hover:bg-accent transition-colors"
-                  style={{ borderColor: c.border }}
+                  href={`/artist/${spec.mbid}`}
+                  className="flex flex-col items-center gap-2 group"
                 >
-                  <div className="text-xs font-semibold truncate" style={{ color: c.text }}>
-                    {spec.primaryFamily}
+                  <div
+                    className="w-16 h-16 rounded-full overflow-hidden ring-2 transition-all"
+                    style={{ borderColor: c.border, '--tw-ring-color': c.border } as React.CSSProperties}
+                  >
+                    {spec.imageUrl ? (
+                      <img src={spec.imageUrl} alt={spec.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div
+                        className="w-full h-full flex items-center justify-center text-xl font-black"
+                        style={{ background: c.bg, color: c.text }}
+                      >
+                        {spec.name.charAt(0)}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-sm font-medium truncate">{spec.name}</div>
+                  <div className="text-center space-y-0.5">
+                    <div className="text-xs font-medium truncate max-w-[80px] group-hover:text-primary transition-colors">{spec.name}</div>
+                    <div className="text-xs" style={{ color: c.text, opacity: 0.8 }}>{spec.primaryFamily}</div>
+                  </div>
                 </Link>
               )
             })}

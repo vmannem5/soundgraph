@@ -32,7 +32,7 @@ export default async function LineagePage({ params }: Props) {
     )
   }
 
-  const specimens = await getSpecimensForTaxonomy(node.id)
+  const artists = await getSpecimensForTaxonomy(node.id)
 
   // Build breadcrumb
   const breadcrumb: Array<{ name: string; slug: string }> = []
@@ -67,7 +67,7 @@ export default async function LineagePage({ params }: Props) {
         </div>
         <h1 className="text-4xl font-black" style={{ color: 'var(--genus-gold)' }}>{node.name}</h1>
         {node.description && <p className="text-muted-foreground mt-2 max-w-xl">{node.description}</p>}
-        <p className="text-sm text-muted-foreground mt-1">{node.specimenCount} specimens</p>
+        <p className="text-sm text-muted-foreground mt-1">{node.specimenCount} artists</p>
       </div>
 
       {/* Sub-levels */}
@@ -91,21 +91,37 @@ export default async function LineagePage({ params }: Props) {
         </section>
       )}
 
-      {/* Specimens */}
+      {/* Artists */}
       <section>
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Specimens</h2>
-        {specimens.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No specimens classified here yet.</p>
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">Artists</h2>
+        {artists.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No artists classified here yet.</p>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-            {specimens.map(spec => (
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
+            {artists.map((artist, i) => (
               <Link
-                key={spec.mbid}
-                href={`/specimen/${spec.mbid}`}
-                className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-accent transition-colors group"
+                key={artist.mbid}
+                href={`/artist/${artist.mbid}`}
+                className="flex flex-col items-center gap-2 group"
               >
-                <div className="font-medium truncate group-hover:text-primary transition-colors">{spec.name}</div>
-                {spec.country && <div className="text-xs text-muted-foreground">{spec.country}</div>}
+                <div className="w-16 h-16 rounded-full overflow-hidden bg-muted ring-2 ring-transparent group-hover:ring-[var(--genus-gold)] transition-all">
+                  {artist.imageUrl ? (
+                    <img src={artist.imageUrl} alt={artist.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div
+                      className="w-full h-full flex items-center justify-center text-lg font-bold"
+                      style={{ background: `oklch(30% 0.05 ${(artist.name.charCodeAt(0) * 37) % 360})`, color: `oklch(75% 0.18 ${(artist.name.charCodeAt(0) * 37) % 360})` }}
+                    >
+                      {artist.name.charAt(0)}
+                    </div>
+                  )}
+                </div>
+                <div className="text-xs font-medium text-center truncate w-full group-hover:text-primary transition-colors">{artist.name}</div>
+                {i < 3 && (
+                  <div className="text-xs text-muted-foreground -mt-1" style={{ color: 'var(--genus-gold)', opacity: 0.7 }}>
+                    #{i + 1} influence
+                  </div>
+                )}
               </Link>
             ))}
           </div>

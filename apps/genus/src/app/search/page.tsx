@@ -16,7 +16,7 @@ export default async function SearchPage({ searchParams }: Props) {
     <main className="max-w-3xl mx-auto px-6 py-10 space-y-8">
       <div>
         <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">← Back to GENUS</Link>
-        <h1 className="text-2xl font-bold mt-4">Search Specimens</h1>
+        <h1 className="text-2xl font-bold mt-4">Search Artists</h1>
       </div>
 
       <form method="get" className="flex gap-2">
@@ -49,7 +49,7 @@ export default async function SearchPage({ searchParams }: Props) {
               {results.map(spec => (
                 <Link
                   key={spec.mbid}
-                  href={`/specimen/${spec.mbid}`}
+                  href={`/artist/${spec.mbid}`}
                   className="flex items-center gap-3 rounded-lg px-3 py-2.5 border border-border hover:bg-accent transition-colors group"
                 >
                   <div className="w-10 h-10 rounded-full shrink-0 overflow-hidden bg-muted">

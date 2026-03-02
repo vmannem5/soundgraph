@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getSpecimenDetail, getArtistHybridData } from '@/lib/data-service'
 import { SoundProfileRadar } from '@/components/sound-profile-radar'
+import { ReleaseTimeline } from '@/components/release-timeline'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +17,19 @@ const LEVEL_LABELS: Record<string, string> = {
   strain: 'Strain',
 }
 
-export default async function SpecimenPage({ params }: Props) {
+const FAMILY_HUE_MAP: Record<string, number> = {
+  'hip-hop': 35, 'rock': 0, 'jazz': 200,
+  'electronic': 270, 'rnb-soul': 320, 'folk-country': 100,
+}
+
+function isSkippable(rg: { title: string; 'secondary-types'?: string[] }): boolean {
+  const secondaryTypes = (rg['secondary-types'] ?? []).map((t: string) => t.toLowerCase())
+  if (secondaryTypes.some((t: string) => ['remix', 'live', 'compilation', 'mixtape/street', 'demo', 'dj-mix'].includes(t))) return true
+  if (/\b(remix|remixed|remixes|deluxe|remaster|remastered|anniversary|re-issue|reissue|live|bonus|expanded|edition|version)\b/i.test(rg.title)) return true
+  return false
+}
+
+export default async function ArtistPage({ params }: Props) {
   const { mbid } = await params
   const [specimen, hybrid] = await Promise.all([
     getSpecimenDetail(mbid),
@@ -30,7 +43,7 @@ export default async function SpecimenPage({ params }: Props) {
           ← Back to GENUS
         </Link>
         <p className="mt-8 text-muted-foreground">
-          Specimen not found in GENUS classification system.
+          Artist not found in GENUS classification system.
         </p>
         <p className="text-xs text-muted-foreground mt-1">MBID: {mbid}</p>
       </main>
@@ -152,12 +165,12 @@ export default async function SpecimenPage({ params }: Props) {
 
           {specimen.relatedSpecimens.length > 0 && (
             <div className="space-y-2">
-              <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Related Specimens</div>
+              <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Related Artists</div>
               <div className="space-y-1">
                 {specimen.relatedSpecimens.map(rel => (
                   <Link
                     key={rel.mbid}
-                    href={`/specimen/${rel.mbid}`}
+                    href={`/artist/${rel.mbid}`}
                     className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-accent transition-colors group"
                   >
                     <span className="text-sm font-medium group-hover:text-primary transition-colors">{rel.name}</span>
@@ -189,7 +202,7 @@ export default async function SpecimenPage({ params }: Props) {
                   {hybrid.collaborators.map(a => (
                     <Link
                       key={a.mbid}
-                      href={`/specimen/${a.mbid}`}
+                      href={`/artist/${a.mbid}`}
                       className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-accent transition-colors group"
                     >
                       <span className="text-sm font-medium group-hover:text-primary transition-colors truncate">{a.name}</span>
@@ -237,45 +250,54 @@ export default async function SpecimenPage({ params }: Props) {
         </div>
       )}
 
-      {/* Album art — Cover Art Archive */}
-      <AlbumCovers mbid={mbid} />
+      {/* Releases: Timeline + Discography */}
+      <ReleasesSection mbid={mbid} familyHue={FAMILY_HUE_MAP[specimen.primaryFamilySlug ?? ''] ?? 60} />
 
       </div>
     </main>
   )
 }
 
-async function AlbumCovers({ mbid }: { mbid: string }) {
-  // Fetch release groups from MusicBrainz
-  const rgs = await fetch(
-    `https://musicbrainz.org/ws/2/release-group?artist=${mbid}&limit=8&fmt=json`,
+async function ReleasesSection({ mbid, familyHue }: { mbid: string; familyHue: number }) {
+  const allRgs = await fetch(
+    `https://musicbrainz.org/ws/2/release-group?artist=${mbid}&limit=25&fmt=json`,
     { headers: { 'User-Agent': 'MusicGenus/0.1.0 (musicgenus.com)' }, next: { revalidate: 86400 } }
   )
     .then(r => r.ok ? r.json() : null)
-    .then(d => (d?.['release-groups'] ?? []) as Array<{ id: string; title: string; 'primary-type'?: string; 'first-release-date'?: string }>)
+    .then(d => (d?.['release-groups'] ?? []) as Array<{ id: string; title: string; 'primary-type'?: string; 'secondary-types'?: string[]; 'first-release-date'?: string }>)
     .catch(() => [])
 
-  if (!rgs.length) return null
+  const clean = allRgs.filter(rg => !isSkippable(rg))
+  if (!clean.length) return null
 
   return (
-    <div className="border-t border-border pt-8 space-y-4">
-      <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Discography</h2>
-      <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
-        {rgs.map(rg => (
-          <div key={rg.id} className="space-y-1">
-            <div className="aspect-square rounded-lg overflow-hidden bg-muted">
-              <img
-                src={`https://coverartarchive.org/release-group/${rg.id}/front-250`}
-                alt={rg.title}
-                className="w-full h-full object-cover"
-              />
+    <div className="space-y-8">
+      {/* Timeline */}
+      <div className="border-t border-border pt-8 space-y-4">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Release Timeline</h2>
+        <ReleaseTimeline releaseGroups={allRgs} familyHue={familyHue} />
+      </div>
+
+      {/* Album art grid (clean only) */}
+      <div className="border-t border-border pt-8 space-y-4">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Discography</h2>
+        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
+          {clean.map(rg => (
+            <div key={rg.id} className="space-y-1">
+              <div className="aspect-square rounded-lg overflow-hidden bg-muted">
+                <img
+                  src={`https://coverartarchive.org/release-group/${rg.id}/front-250`}
+                  alt={rg.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="text-xs font-medium truncate">{rg.title}</div>
+              {rg['first-release-date'] && (
+                <div className="text-xs text-muted-foreground">{rg['first-release-date'].slice(0, 4)}</div>
+              )}
             </div>
-            <div className="text-xs font-medium truncate">{rg.title}</div>
-            {rg['first-release-date'] && (
-              <div className="text-xs text-muted-foreground">{rg['first-release-date'].slice(0, 4)}</div>
-            )}
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   )
