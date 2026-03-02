@@ -11,14 +11,23 @@ interface Props {
   familyHue: number
 }
 
-function isSkippable(rg: ReleaseGroup): boolean {
-  const title = rg.title.toLowerCase()
+export function isSkippable(rg: ReleaseGroup): boolean {
   const secondaryTypes = (rg['secondary-types'] ?? []).map(t => t.toLowerCase())
-  // Skip if bad secondary type
   if (secondaryTypes.some(t => ['remix', 'live', 'compilation', 'mixtape/street', 'demo', 'dj-mix'].includes(t))) return true
-  // Skip if title suggests it's a variant
-  if (/\b(remix|remixed|remixes|deluxe|remaster|remastered|anniversary|re-issue|reissue|live|bonus|expanded|edition|version)\b/i.test(title)) return true
+  if (/\b(remix|remixed|remixes|deluxe|remaster|remastered|anniversary|re-issue|reissue|live|bonus|expanded|edition|version)\b/i.test(rg.title)) return true
   return false
+}
+
+// Bar heights per release type (proxy for relative impact)
+const BAR_HEIGHTS: Record<string, number> = {
+  Album: 48,
+  EP: 28,
+  Single: 16,
+  Other: 12,
+}
+
+function barHeight(type?: string): number {
+  return BAR_HEIGHTS[type ?? 'Other'] ?? 12
 }
 
 export function ReleaseTimeline({ releaseGroups, familyHue }: Props) {
@@ -30,76 +39,134 @@ export function ReleaseTimeline({ releaseGroups, familyHue }: Props) {
 
   const years = filtered.map(rg => parseInt(rg['first-release-date']!.slice(0, 4)))
   const minYear = Math.min(...years)
-  const maxYear = Math.max(...years, minYear)
-  const span = Math.max(maxYear - minYear, 1)
+  const maxYear = Math.max(...years)
 
-  // Group by year
-  const byYear = new Map<number, ReleaseGroup[]>()
+  // Group by year, separated into Albums and EPs/Singles
+  type YearBucket = { albums: ReleaseGroup[]; eps: ReleaseGroup[]; singles: ReleaseGroup[] }
+  const byYear = new Map<number, YearBucket>()
+  for (let y = minYear; y <= maxYear; y++) byYear.set(y, { albums: [], eps: [], singles: [] })
   for (const rg of filtered) {
     const y = parseInt(rg['first-release-date']!.slice(0, 4))
-    if (!byYear.has(y)) byYear.set(y, [])
-    byYear.get(y)!.push(rg)
+    const bucket = byYear.get(y)!
+    const t = rg['primary-type'] ?? ''
+    if (t === 'Album') bucket.albums.push(rg)
+    else if (t === 'EP') bucket.eps.push(rg)
+    else bucket.singles.push(rg)
   }
 
-  const typeColor = (type?: string) => {
-    if (type === 'Album') return `oklch(68% 0.2 ${familyHue})`
-    if (type === 'EP') return `oklch(68% 0.15 ${(familyHue + 30) % 360})`
-    return `oklch(55% 0.1 ${familyHue})`
+  // SVG layout
+  const COL_W = 36        // width per year column
+  const BAR_W = 20        // bar width
+  const MAX_STACK = 120   // max stacked bar height
+  const LABEL_H = 20      // year label area below bars
+  const PAD_TOP = 8
+  const SVG_H = MAX_STACK + LABEL_H + PAD_TOP
+  const yearList = Array.from(byYear.keys()).sort((a, b) => a - b)
+  const SVG_W = yearList.length * COL_W + 16
+
+  // Colors
+  const albumColor = `oklch(68% 0.22 ${familyHue})`
+  const epColor = `oklch(58% 0.14 ${(familyHue + 40) % 360})`
+  const singleColor = `oklch(48% 0.08 ${familyHue})`
+
+  function stackedBars(year: number, bucket: YearBucket, x: number) {
+    const bars: Array<{ rg: ReleaseGroup; color: string; h: number }> = [
+      ...bucket.albums.map(rg => ({ rg, color: albumColor, h: BAR_HEIGHTS.Album })),
+      ...bucket.eps.map(rg => ({ rg, color: epColor, h: BAR_HEIGHTS.EP })),
+      ...bucket.singles.map(rg => ({ rg, color: singleColor, h: BAR_HEIGHTS.Single })),
+    ]
+    if (bars.length === 0) return null
+
+    const totalH = Math.min(bars.reduce((s, b) => s + b.h, 0), MAX_STACK)
+    const barX = x + (COL_W - BAR_W) / 2
+
+    let currentY = PAD_TOP + MAX_STACK - totalH
+    const rects: React.ReactNode[] = []
+
+    for (const bar of bars) {
+      const h = Math.min(bar.h, MAX_STACK - (currentY - PAD_TOP))
+      if (h <= 0) break
+      rects.push(
+        <rect
+          key={bar.rg.id}
+          x={barX}
+          y={currentY}
+          width={BAR_W}
+          height={h}
+          fill={bar.color}
+          rx={2}
+          style={{ cursor: 'pointer' }}
+        >
+          <title>{bar.rg.title} ({year}) — {bar.rg['primary-type'] ?? 'Release'}</title>
+        </rect>
+      )
+      // Small gap between stacked segments
+      currentY += h + 1
+    }
+
+    return rects
   }
 
   return (
     <div className="space-y-3">
-      {/* Year labels + dots */}
-      <div className="relative h-20 w-full overflow-x-auto">
-        <div className="relative h-full" style={{ minWidth: `${Math.max(span * 28, 300)}px` }}>
-          {/* Timeline base line */}
-          <div
-            className="absolute top-8 left-0 right-0 h-px"
-            style={{ background: `oklch(65% 0.1 ${familyHue} / 0.3)` }}
+      <div className="w-full overflow-x-auto">
+        <svg
+          width={SVG_W}
+          height={SVG_H}
+          style={{ display: 'block', minWidth: '100%' }}
+        >
+          {/* Baseline */}
+          <line
+            x1={0} y1={PAD_TOP + MAX_STACK}
+            x2={SVG_W} y2={PAD_TOP + MAX_STACK}
+            stroke={`oklch(65% 0.1 ${familyHue} / 0.2)`}
+            strokeWidth={1}
           />
 
-          {Array.from(byYear.entries()).map(([year, rgs]) => {
-            const pct = span === 0 ? 50 : ((year - minYear) / span) * 100
+          {yearList.map((year, i) => {
+            const bucket = byYear.get(year)!
+            const x = i * COL_W + 8
+            const hasReleases = bucket.albums.length + bucket.eps.length + bucket.singles.length > 0
+
             return (
-              <div
-                key={year}
-                className="absolute flex flex-col items-center gap-1"
-                style={{ left: `${pct}%`, transform: 'translateX(-50%)' }}
-              >
-                {/* Stacked dots for multiple releases in same year */}
-                <div className="flex gap-0.5 items-end" style={{ marginTop: `${Math.max(0, 20 - rgs.length * 4)}px` }}>
-                  {rgs.map(rg => (
-                    <div
-                      key={rg.id}
-                      className="rounded-full transition-transform hover:scale-125"
-                      title={`${rg.title} (${rg['first-release-date']?.slice(0, 4)})`}
-                      style={{
-                        width: rg['primary-type'] === 'Album' ? 12 : 8,
-                        height: rg['primary-type'] === 'Album' ? 12 : 8,
-                        background: typeColor(rg['primary-type']),
-                        boxShadow: `0 0 6px ${typeColor(rg['primary-type'])}`,
-                      }}
-                    />
-                  ))}
-                </div>
-                {/* Year label */}
-                <div className="text-xs text-muted-foreground whitespace-nowrap" style={{ marginTop: '22px' }}>
-                  {year}
-                </div>
-              </div>
+              <g key={year}>
+                {stackedBars(year, bucket, x)}
+
+                {/* Year label — only show if has releases or is a decade marker */}
+                {(hasReleases || year % 5 === 0) && (
+                  <text
+                    x={x + COL_W / 2}
+                    y={PAD_TOP + MAX_STACK + LABEL_H - 2}
+                    textAnchor="middle"
+                    fontSize={9}
+                    fill="currentColor"
+                    fillOpacity={hasReleases ? 0.6 : 0.25}
+                    style={{ userSelect: 'none' }}
+                  >
+                    {year}
+                  </text>
+                )}
+              </g>
             )
           })}
-        </div>
+        </svg>
       </div>
 
       {/* Legend */}
-      <div className="flex gap-4 text-xs text-muted-foreground">
+      <div className="flex gap-5 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 rounded-full" style={{ background: typeColor('Album') }} /> Album
+          <span className="inline-block w-3 h-3 rounded-sm" style={{ background: albumColor }} />
+          Album
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block w-2 h-2 rounded-full" style={{ background: typeColor('EP') }} /> EP / Single
+          <span className="inline-block w-3 h-2.5 rounded-sm" style={{ background: epColor }} />
+          EP
         </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-1.5 rounded-sm" style={{ background: singleColor }} />
+          Single
+        </span>
+        <span className="text-muted-foreground/50 ml-auto">Bar height = release weight</span>
       </div>
     </div>
   )
