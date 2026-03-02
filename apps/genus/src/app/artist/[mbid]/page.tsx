@@ -2,7 +2,6 @@ import Link from 'next/link'
 import { getSpecimenDetail, getArtistHybridData } from '@/lib/data-service'
 import { SoundProfileRadar } from '@/components/sound-profile-radar'
 import { ReleaseTimeline } from '@/components/release-timeline'
-import { ConnectionBubbles, type Connection } from '@/components/connection-bubbles'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,12 +32,30 @@ const S = {
   mono: { fontFamily: 'var(--font-mono-custom)', fontSize: '0.68rem', color: 'var(--fg-muted)' } as React.CSSProperties,
 }
 
+/** Fetch Spotify image from web app API (same server, instant) when DB imageUrl is null */
+async function getSpotifyImage(mbid: string): Promise<string | null> {
+  try {
+    const res = await fetch(`http://localhost:3000/api/artist/${mbid}`, {
+      next: { revalidate: 86400 },
+      headers: { 'User-Agent': 'MusicGenus/internal' },
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return data?.spotifyData?.images?.[0]?.url ?? data?.imageUrl ?? null
+  } catch {
+    return null
+  }
+}
+
 export default async function ArtistPage({ params }: Props) {
   const { mbid } = await params
   const [specimen, hybrid] = await Promise.all([
     getSpecimenDetail(mbid),
     getArtistHybridData(mbid),
   ])
+
+  // Enrich imageUrl from Spotify if not in DB
+  const imageUrl = specimen?.imageUrl ?? await getSpotifyImage(mbid)
 
   if (!specimen) {
     return (
@@ -58,18 +75,22 @@ export default async function ArtistPage({ params }: Props) {
 
       {/* ── Hero ─────────────────────────────────────────────────────── */}
       <div style={{ position: 'relative', overflow: 'hidden' }}>
-        {specimen.imageUrl && (
+        {imageUrl && (
           <>
-            <img src={specimen.imageUrl} alt="" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(60px)', transform: 'scale(1.2)', opacity: 0.2 }} />
+            <img src={imageUrl} alt="" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(60px)', transform: 'scale(1.2)', opacity: 0.2 }} />
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 0%, var(--bg) 100%)' }} />
           </>
         )}
         <div style={{ position: 'relative', zIndex: 1, maxWidth: '900px', margin: '0 auto', padding: '40px 32px 36px', display: 'flex', gap: '28px', alignItems: 'flex-end' }}>
-          {specimen.imageUrl && (
-            <div style={{ width: '88px', height: '88px', borderRadius: '50%', overflow: 'hidden', border: '1px solid var(--border-light)', flexShrink: 0, background: 'var(--bg-3)' }}>
-              <img src={specimen.imageUrl} alt={specimen.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            </div>
-          )}
+          <div style={{ width: '96px', height: '96px', borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--border-light)', flexShrink: 0, background: 'var(--bg-3)' }}>
+            {imageUrl ? (
+              <img src={imageUrl} alt={specimen.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-cormorant)', fontWeight: 600, fontSize: '2.5rem', color: 'var(--gold)' }}>
+                {specimen.name.charAt(0)}
+              </div>
+            )}
+          </div>
           <div>
             {/* Breadcrumb */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
@@ -189,54 +210,7 @@ export default async function ArtistPage({ params }: Props) {
           </div>
         </div>
 
-        {/* ── Mind Map ─────────────────────────────────────────────── */}
-        {(hybrid.collaborators.length > 0 || hybrid.samplesFrom.length > 0 || hybrid.sampledBy.length > 0 || specimen.tags.length > 0) && (() => {
-          const connections: Connection[] = [
-            ...hybrid.collaborators.slice(0, 8).map(a => ({
-              type: 'performer',
-              label: `${a.count} tracks`,
-              targetType: 'artist' as const,
-              targetId: a.mbid,
-              targetName: a.name,
-              importance: a.count,
-            })),
-            ...hybrid.samplesFrom.slice(0, 4).map(r => ({
-              type: 'samples material',
-              label: 'samples',
-              targetType: 'recording' as const,
-              targetId: r.mbid,
-              targetName: r.artistName ? `${r.title} (${r.artistName})` : r.title,
-              importance: 1,
-            })),
-            ...hybrid.sampledBy.slice(0, 4).map(r => ({
-              type: 'sampled by',
-              label: 'sampled by',
-              targetType: 'recording' as const,
-              targetId: r.mbid,
-              targetName: r.artistName ? `${r.title} (${r.artistName})` : r.title,
-              importance: 1,
-            })),
-            ...specimen.tags.slice(0, 10).map(t => ({
-              type: 'genre' as const,
-              label: t.tag,
-              targetType: 'tag' as const,
-              targetId: t.tag,
-              targetName: t.tag,
-              importance: t.count,
-            })),
-          ]
-          return (
-            <div>
-              <hr style={S.rule} />
-              <div style={{ marginTop: '40px' }}>
-                <p style={S.sectionHeader}>Connections</p>
-                <ConnectionBubbles connections={connections} />
-              </div>
-            </div>
-          )
-        })()}
-
-        {/* ── Connection Details ────────────────────────────────────── */}
+        {/* ── Connections ──────────────────────────────────────────── */}
         {(hybrid.collaborators.length > 0 || hybrid.samplesFrom.length > 0 || hybrid.sampledBy.length > 0) && (
           <div>
             <hr style={S.rule} />

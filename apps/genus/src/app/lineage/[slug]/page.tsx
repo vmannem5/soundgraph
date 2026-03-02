@@ -45,6 +45,25 @@ export default async function LineagePage({ params }: Props) {
 
   const artists = await getSpecimensForTaxonomy(node.id)
 
+  // Enrich images for artists missing imageUrl (fetch from web app Spotify API)
+  const enriched = await Promise.all(
+    artists.map(async a => {
+      if (a.imageUrl) return a
+      try {
+        const res = await fetch(`http://localhost:3000/api/artist/${a.mbid}`, {
+          next: { revalidate: 86400 },
+          headers: { 'User-Agent': 'MusicGenus/internal' },
+        })
+        if (!res.ok) return a
+        const data = await res.json()
+        const img = data?.spotifyData?.images?.[0]?.url ?? data?.imageUrl ?? null
+        return { ...a, imageUrl: img }
+      } catch {
+        return a
+      }
+    })
+  )
+
   // Build breadcrumb
   const breadcrumb: Array<{ name: string; slug: string }> = []
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -121,7 +140,7 @@ export default async function LineagePage({ params }: Props) {
           <p style={{ color: 'var(--fg-muted)', fontSize: '0.85rem', fontFamily: 'var(--font-syne)' }}>No artists classified here yet.</p>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '24px 16px' }}>
-            {artists.map((artist, i) => (
+            {enriched.map((artist, i) => (
               <Link key={artist.mbid} href={`/artist/${artist.mbid}`} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                 <div style={{
                   width: '64px', height: '64px', borderRadius: '50%', overflow: 'hidden',
