@@ -139,7 +139,7 @@ export default async function LineagePage({ params }: Props) {
         {artists.length === 0 ? (
           <p style={{ color: 'var(--fg-muted)', fontSize: '0.85rem', fontFamily: 'var(--font-syne)' }}>No artists classified here yet.</p>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '24px 16px' }}>
+          <div className="g-artist-grid">
             {enriched.map((artist, i) => (
               <Link key={artist.mbid} href={`/artist/${artist.mbid}`} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                 <div style={{

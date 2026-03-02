@@ -60,7 +60,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <span style={{ fontFamily: 'var(--font-cormorant)', fontWeight: 700, fontSize: '1.4rem', letterSpacing: '0.14em', color: 'var(--gold)' }}>
               GENUS
             </span>
-            <span style={{ fontSize: '0.6rem', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--fg-muted)', fontWeight: 600, fontFamily: 'var(--font-syne)' }}>
+            <span className="g-hide-mobile" style={{ fontSize: '0.6rem', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--fg-muted)', fontWeight: 600, fontFamily: 'var(--font-syne)' }}>
               Sound Classification
             </span>
           </Link>

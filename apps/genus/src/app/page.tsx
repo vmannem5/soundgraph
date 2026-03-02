@@ -48,8 +48,7 @@ export default async function HomePage() {
           return (
             <Link key={fam.slug} href={`/lineage/${fam.slug}`} style={{ textDecoration: 'none', display: 'block' }}>
               <div
-                className="fam-row"
-                style={{ display: 'grid', gridTemplateColumns: '2.5rem 1fr auto', alignItems: 'center', gap: '16px', padding: '14px 8px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
+                className="fam-row g-family-row"
               >
                 {/* Index */}
                 <span style={{ fontSize: '0.58rem', color: 'var(--fg-faint)', fontFamily: 'var(--font-mono-custom)', paddingLeft: '4px' }}>
@@ -92,7 +91,7 @@ export default async function HomePage() {
                       ))}
                     </div>
                   )}
-                  <span style={{ fontSize: '0.65rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-mono-custom)', whiteSpace: 'nowrap' }}>
+                  <span className="g-family-row-count" style={{ fontSize: '0.65rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-mono-custom)', whiteSpace: 'nowrap' }}>
                     {fam.specimenCount.toLocaleString()}
                   </span>
                 </div>
@@ -110,7 +109,7 @@ export default async function HomePage() {
           </p>
 
           {/* 6 featured artists in a row */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px', marginBottom: '24px' }}>
+          <div className="g-featured-grid">
             {featured.map(spec => (
               <Link key={spec.mbid} href={`/artist/${spec.mbid}`} style={{ textDecoration: 'none' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>

@@ -26,7 +26,6 @@ function isSkippable(rg: { title: string; 'secondary-types'?: string[] }): boole
 }
 
 const S = {
-  page: { maxWidth: '900px', margin: '0 auto', padding: '0 32px 80px' } as React.CSSProperties,
   sectionHeader: { fontSize: '0.62rem', letterSpacing: '0.2em', textTransform: 'uppercase' as const, color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', fontWeight: 600 as const, borderBottom: '1px solid var(--border)', paddingBottom: '10px', marginBottom: '16px' },
   rule: { border: 'none', borderTop: '1px solid var(--border)', margin: '40px 0 0' } as React.CSSProperties,
   mono: { fontFamily: 'var(--font-mono-custom)', fontSize: '0.68rem', color: 'var(--fg-muted)' } as React.CSSProperties,
@@ -59,7 +58,7 @@ export default async function ArtistPage({ params }: Props) {
 
   if (!specimen) {
     return (
-      <main style={S.page}>
+      <main className="g-page">
         <div style={{ padding: '48px 0' }}>
           <Link href="/" style={{ fontSize: '0.7rem', color: 'var(--fg-muted)', letterSpacing: '0.1em', textDecoration: 'none' }}>← GENUS</Link>
           <p style={{ marginTop: '32px', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)' }}>Artist not found.</p>
@@ -82,7 +81,7 @@ export default async function ArtistPage({ params }: Props) {
           </>
         )}
         <div style={{ position: 'relative', zIndex: 1, maxWidth: '900px', margin: '0 auto', padding: '40px 32px 36px', display: 'flex', gap: '28px', alignItems: 'flex-end' }}>
-          <div style={{ width: '96px', height: '96px', borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--border-light)', flexShrink: 0, background: 'var(--bg-3)' }}>
+          <div className="g-hero-portrait" style={{ width: '96px', height: '96px', borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--border-light)', flexShrink: 0, background: 'var(--bg-3)' }}>
             {imageUrl ? (
               <img src={imageUrl} alt={specimen.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
@@ -102,7 +101,7 @@ export default async function ArtistPage({ params }: Props) {
                 </span>
               ))}
             </div>
-            <h1 style={{ fontFamily: 'var(--font-cormorant)', fontSize: 'clamp(26px, 3.5vw, 44px)', fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.0, color: 'var(--fg)', marginBottom: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <h1 className="g-hero-title" style={{ fontFamily: 'var(--font-cormorant)', fontSize: 'clamp(26px, 3.5vw, 44px)', fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.0, color: 'var(--fg)', marginBottom: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {specimen.name}
             </h1>
             {(specimen.type || specimen.country) && (
@@ -115,10 +114,10 @@ export default async function ArtistPage({ params }: Props) {
         <hr style={{ ...S.rule, margin: 0 }} />
       </div>
 
-      <div style={S.page}>
+      <div className="g-page">
 
         {/* ── Classification + Radar + Origins ─────────────────────── */}
-        <div style={{ marginTop: '40px', display: 'grid', gridTemplateColumns: '1fr 1.1fr 1fr', gap: '40px', alignItems: 'start' }}>
+        <div className="g-3col" style={{ marginTop: '40px' }}>
 
           {/* Left: Lineage + Sound Signature */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
@@ -216,7 +215,7 @@ export default async function ArtistPage({ params }: Props) {
             <hr style={S.rule} />
             <div style={{ marginTop: '40px' }}>
               <p style={S.sectionHeader}>Connections</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '40px' }}>
+              <div className="g-connections-grid">
 
                 {hybrid.collaborators.length > 0 && (
                   <div>
