@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getTaxonomyNode, getSoundFamilies, getSpecimensForTaxonomy, getArtistSpotifyImage } from '@/lib/data-service'
+import { getTaxonomyNode, getSoundFamilies, getSpecimensForTaxonomy, getArtistSpotifyImage, getArtistTheAudioDBImage } from '@/lib/data-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,13 +45,15 @@ export default async function LineagePage({ params }: Props) {
 
   const artists = await getSpecimensForTaxonomy(node.id)
 
-  // Enrich images for top 8 artists missing imageUrl
+  // Enrich images for top 32 artists missing imageUrl with Spotify + TheAudioDB
   const enriched = await Promise.all(
     artists.map(async (a, i) => {
       if (a.imageUrl) return a
-      if (i >= 8) return a
+      if (i >= 32) return a
       const img = await getArtistSpotifyImage(a.mbid)
-      return { ...a, imageUrl: img }
+      if (img) return { ...a, imageUrl: img }
+      const theaudiodbImg = await getArtistTheAudioDBImage(a.mbid)
+      return { ...a, imageUrl: theaudiodbImg }
     })
   )
 

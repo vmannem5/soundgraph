@@ -1096,3 +1096,9 @@ export async function getArtistSpotifyImage(mbid: string): Promise<string | null
     return null
   }
 }
+
+export async function getArtistTheAudioDBImage(mbid: string): Promise<string | null> {
+  const tadb = await import('./theaudiodb')
+  const artist = await tadb.getArtistByMBID(mbid)
+  return tadb.getBestImage(artist)
+}

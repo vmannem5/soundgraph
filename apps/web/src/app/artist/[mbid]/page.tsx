@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getSpecimenDetail, getArtistHybridData, getArtistSpotifyImage } from '@/lib/data-service'
+import { getSpecimenDetail, getArtistHybridData, getArtistSpotifyImage, getArtistTheAudioDBImage } from '@/lib/data-service'
 import { SoundProfileRadar } from '@/components/sound-profile-radar'
 import { ReleaseTimeline, isSkippable } from '@/components/release-timeline'
 
@@ -45,7 +45,8 @@ export default async function ArtistPage({ params }: Props) {
     getArtistHybridData(mbid),
   ])
 
-  const imageUrl = specimen?.imageUrl ?? await getArtistSpotifyImage(mbid)
+  const spotifyImg = await getArtistSpotifyImage(mbid)
+  const imageUrl = specimen?.imageUrl ?? spotifyImg ?? await getArtistTheAudioDBImage(mbid)
 
   if (!specimen) {
     return (
