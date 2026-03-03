@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getTaxonomyNode, getSoundFamilies, getSpecimensForTaxonomy } from '@/lib/data-service'
+import { getTaxonomyNode, getSoundFamilies, getSpecimensForTaxonomy, getArtistSpotifyImage } from '@/lib/data-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,35 +45,21 @@ export default async function LineagePage({ params }: Props) {
 
   const artists = await getSpecimensForTaxonomy(node.id)
 
-  const WEB_URL = process.env.WEB_APP_URL ?? 'http://localhost:3000'
-
-  // Enrich images for top 8 artists missing imageUrl (cap to avoid N+1 fan-out)
+  // Enrich images for top 8 artists missing imageUrl
   const enriched = await Promise.all(
     artists.map(async (a, i) => {
       if (a.imageUrl) return a
-      if (i >= 8) return a  // only enrich top 8 to limit SSR HTTP fan-out
-      try {
-        const res = await fetch(`${WEB_URL}/api/artist/${a.mbid}`, {
-          next: { revalidate: 86400 },
-          headers: { 'User-Agent': 'MusicGenus/internal' },
-        })
-        if (!res.ok) return a
-        const data = await res.json()
-        const img = data?.spotifyData?.images?.[0]?.url ?? data?.imageUrl ?? null
-        return { ...a, imageUrl: img }
-      } catch {
-        return a
-      }
+      if (i >= 8) return a
+      const img = await getArtistSpotifyImage(a.mbid)
+      return { ...a, imageUrl: img }
     })
   )
 
-  // Build breadcrumb
   const breadcrumb: Array<{ name: string; slug: string }> = []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let current: any = node
+  let current: typeof node & { parent: typeof node.parent } = node as typeof current
   while (current.parent) {
     breadcrumb.unshift({ name: current.parent.name, slug: current.parent.slug })
-    current = current.parent
+    current = current.parent as typeof current
   }
 
   const childLevel = node.children[0]?.level
@@ -81,7 +67,6 @@ export default async function LineagePage({ params }: Props) {
   return (
     <main style={{ maxWidth: '900px', margin: '0 auto', padding: '40px 32px 80px' }}>
 
-      {/* Breadcrumb */}
       <nav style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
         <Link href="/" style={{ fontSize: '0.62rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--fg-muted)', textDecoration: 'none', fontFamily: 'var(--font-syne)' }}>GENUS</Link>
         {breadcrumb.map(b => (
@@ -94,7 +79,6 @@ export default async function LineagePage({ params }: Props) {
         <span style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--fg)', fontFamily: 'var(--font-syne)', fontWeight: 700 }}>{node.name}</span>
       </nav>
 
-      {/* Header */}
       <div style={{ marginBottom: '40px', paddingBottom: '32px', borderBottom: '1px solid var(--border)' }}>
         <p style={{ fontSize: '0.6rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', fontWeight: 600, marginBottom: '8px' }}>
           {LEVEL_LABELS[node.level] ?? node.level}
@@ -112,7 +96,6 @@ export default async function LineagePage({ params }: Props) {
         </p>
       </div>
 
-      {/* Sub-levels */}
       {node.children.length > 0 && (
         <div style={{ marginBottom: '40px' }}>
           <p style={sectionHeader}>
@@ -136,7 +119,6 @@ export default async function LineagePage({ params }: Props) {
         </div>
       )}
 
-      {/* Artists grid */}
       <div>
         <p style={sectionHeader}>Artists — sorted by influence</p>
         {artists.length === 0 ? (

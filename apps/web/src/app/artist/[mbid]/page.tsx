@@ -1,398 +1,304 @@
-import { getArtistDetails, getArtistConnections, getArtistGenreTimeline } from '@/lib/data-service'
-import { GenreHeatmap } from '@/components/genre-heatmap'
-import { prisma } from '@soundgraph/database'
-import * as mb from '@/lib/musicbrainz'
-import { Badge } from '@/components/ui/badge'
-import { GeneratedAvatar } from '@/lib/avatar'
-import { ReleaseGroupCover } from '@/components/release-group-cover'
-import { ConnectionBubbles } from '@/components/connection-bubbles'
-import { BackButton } from '@/components/back-button'
 import Link from 'next/link'
+import { getSpecimenDetail, getArtistHybridData, getArtistSpotifyImage } from '@/lib/data-service'
+import { SoundProfileRadar } from '@/components/sound-profile-radar'
+import { ReleaseTimeline, isSkippable } from '@/components/release-timeline'
+
+const MBID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const dynamic = 'force-dynamic'
 
-interface ArtistPageProps {
+interface Props {
   params: Promise<{ mbid: string }>
 }
 
-async function getArtistReleaseGroupsFromDb(mbid: string) {
-  // Get release groups via credits: artist → credits → recordings → release recordings → releases → release groups
-  const results = await prisma.$queryRaw<Array<{
-    mbid: string; title: string; type: string | null; firstReleaseDate: string | null
-  }>>`
-    SELECT DISTINCT rg.mbid, rg.title, rg.type, rg."firstReleaseDate"
-    FROM "Artist" a
-    JOIN "Credit" c ON c."artistId" = a.id
-    JOIN "Recording" r ON r.id = c."recordingId"
-    JOIN "ReleaseRecording" rr ON rr."recordingId" = r.id
-    JOIN "Release" rel ON rel.id = rr."releaseId"
-    JOIN "ReleaseGroup" rg ON rg.id = rel."releaseGroupId"
-    WHERE a.mbid = ${mbid}
-    ORDER BY rg."firstReleaseDate" DESC NULLS LAST
-    LIMIT 30
-  `.catch(() => [])
-
-  return results.map(rg => ({
-    id: rg.mbid,
-    title: rg.title,
-    'primary-type': rg.type,
-    'first-release-date': rg.firstReleaseDate,
-  }))
+const LEVEL_LABELS: Record<string, string> = {
+  family: 'Sound Family', movement: 'Movement', scene: 'Scene', sound: 'Sound', strain: 'Strain',
 }
 
-function sortReleaseGroupsNewestFirst(rgs: any[]): any[] {
-  return [...rgs].sort((a, b) => {
-    const dateA = a['first-release-date']
-    const dateB = b['first-release-date']
-    if (!dateA && !dateB) return 0
-    if (!dateA) return 1
-    if (!dateB) return -1
-    return dateB.localeCompare(dateA)
-  })
+const FAMILY_HUE_MAP: Record<string, number> = {
+  'hip-hop': 35, 'rock': 0, 'jazz': 200,
+  'electronic': 270, 'rnb-soul': 320, 'folk-country': 100,
 }
 
 
-export default async function ArtistPage({ params }: ArtistPageProps) {
+const S = {
+  sectionHeader: { fontSize: '0.62rem', letterSpacing: '0.2em', textTransform: 'uppercase' as const, color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', fontWeight: 600 as const, borderBottom: '1px solid var(--border)', paddingBottom: '10px', marginBottom: '16px' },
+  rule: { border: 'none', borderTop: '1px solid var(--border)', margin: '40px 0 0' } as React.CSSProperties,
+  mono: { fontFamily: 'var(--font-mono-custom)', fontSize: '0.68rem', color: 'var(--fg-muted)' } as React.CSSProperties,
+}
+
+export default async function ArtistPage({ params }: Props) {
   const { mbid } = await params
-
-  // Run all fetches in parallel — they're independent
-  const [artistResult, connectionsData, releaseGroupsResult, genreTimeline] = await Promise.all([
-    getArtistDetails(mbid).catch((e: unknown) => e),
-    getArtistConnections(mbid),
-    (async () => {
-      try {
-        const rgs = await mb.getArtistReleaseGroups(mbid, 25)
-        return rgs['release-groups'] || []
-      } catch {
-        return await getArtistReleaseGroupsFromDb(mbid)
-      }
-    })(),
-    getArtistGenreTimeline(mbid),
-  ])
-
-  if (artistResult instanceof Error) {
+  if (!MBID_RE.test(mbid)) {
     return (
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-4">
-        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-          &larr; Back to search
-        </Link>
-        <p className="text-muted-foreground">
-          Artist not found.{' '}
-          <Link href="/" className="underline hover:text-foreground">Back to search</Link>
-        </p>
+      <main className="g-page">
+        <div style={{ padding: '48px 0' }}>
+          <Link href="/" style={{ fontSize: '0.7rem', color: 'var(--fg-muted)', textDecoration: 'none' }}>← GENUS</Link>
+          <p style={{ marginTop: '32px', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)' }}>Invalid artist ID.</p>
+        </div>
       </main>
     )
   }
 
-  const artist = artistResult
-  const { topCollaborators, topProducers, samplesFrom, sampledBy } = connectionsData
+  const [specimen, hybrid] = await Promise.all([
+    getSpecimenDetail(mbid),
+    getArtistHybridData(mbid),
+  ])
 
-  // Sort newest first
-  const releaseGroupsList = sortReleaseGroupsNewestFirst(releaseGroupsResult)
+  const imageUrl = specimen?.imageUrl ?? await getArtistSpotifyImage(mbid)
 
-  const tags = artist.tags?.slice(0, 10) || []
-  const spotifyGenres: string[] = artist.spotifyData?.genres || []
-  const allGenres = [...spotifyGenres, ...tags.map((t: any) => t.name)]
-    .filter((v, i, a) => a.indexOf(v) === i)
-    .slice(0, 12)
+  if (!specimen) {
+    return (
+      <main className="g-page">
+        <div style={{ padding: '48px 0' }}>
+          <Link href="/" style={{ fontSize: '0.7rem', color: 'var(--fg-muted)', letterSpacing: '0.1em', textDecoration: 'none' }}>← GENUS</Link>
+          <p style={{ marginTop: '32px', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)' }}>Artist not found.</p>
+        </div>
+      </main>
+    )
+  }
 
-  const heroImageUrl: string | null = artist.spotifyData?.images?.[0]?.url ?? null
+  const familyHue = FAMILY_HUE_MAP[specimen.primaryFamilySlug ?? ''] ?? 60
 
   return (
-    <main className="min-h-screen">
-      {/* Editorial hero */}
-      <div className="relative w-full overflow-hidden" style={{ minHeight: '340px' }}>
-        {/* Blurred background */}
-        {heroImageUrl ? (
+    <main style={{ minHeight: '100vh' }}>
+
+      <div style={{ position: 'relative', overflow: 'hidden' }}>
+        {imageUrl && (
           <>
-            <img
-              src={heroImageUrl}
-              alt=""
-              aria-hidden="true"
-              className="absolute inset-0 w-full h-full object-cover"
-              style={{ filter: 'blur(40px)', transform: 'scale(1.15)', opacity: 0.45 }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/50 to-background" />
+            <img src={imageUrl} alt="" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(60px)', transform: 'scale(1.2)', opacity: 0.2 }} />
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 0%, var(--bg) 100%)' }} />
           </>
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-b from-neutral-900 via-neutral-800/80 to-background" />
         )}
-
-        {/* Back link */}
-        <div className="relative z-10 px-4 sm:px-8 pt-6">
-          <BackButton className="text-white/70 hover:text-white" />
-        </div>
-
-        {/* Hero content */}
-        <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-end gap-6 px-4 sm:px-8 pb-8 pt-4">
-          {/* Artist photo */}
-          <div
-            className="shrink-0 rounded-full overflow-hidden ring-4 ring-white/20 shadow-2xl bg-neutral-800"
-            style={{ width: 160, height: 160 }}
-          >
-            {heroImageUrl ? (
-              <img
-                src={heroImageUrl}
-                alt={artist.name}
-                className="w-full h-full object-cover"
-              />
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: '900px', margin: '0 auto', padding: '40px 32px 36px', display: 'flex', gap: '28px', alignItems: 'flex-end' }}>
+          <div className="g-hero-portrait" style={{ width: '96px', height: '96px', borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--border-light)', flexShrink: 0, background: 'var(--bg-3)' }}>
+            {imageUrl ? (
+              <img src={imageUrl} alt={specimen.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
-              <GeneratedAvatar
-                id={mbid}
-                name={artist.name}
-                genres={spotifyGenres}
-                size={160}
-              />
-            )}
-          </div>
-
-          {/* Text block */}
-          <div className="flex flex-col gap-3 text-center sm:text-left">
-            <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-              {artist.type && (
-                <Badge className="bg-white/15 text-white border-white/20 text-xs backdrop-blur">
-                  {artist.type}
-                </Badge>
-              )}
-              {artist.country && (
-                <Badge variant="outline" className="border-white/30 text-white/80 text-xs backdrop-blur">
-                  {artist.country}
-                </Badge>
-              )}
-              {artist['life-span']?.begin && (
-                <Badge variant="outline" className="border-white/30 text-white/80 text-xs backdrop-blur">
-                  {artist['life-span'].begin}
-                  {artist['life-span'].end
-                    ? ` – ${artist['life-span'].end}`
-                    : ' – present'}
-                </Badge>
-              )}
-            </div>
-
-            <h1 className="text-4xl sm:text-5xl font-extrabold text-white drop-shadow-lg leading-tight">
-              {artist.name}
-            </h1>
-
-            {artist.disambiguation && (
-              <p className="text-white/60 text-sm">{artist.disambiguation}</p>
-            )}
-
-            {/* Genre pills */}
-            {allGenres.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 justify-center sm:justify-start">
-                {allGenres.map((tag: string) => (
-                  <span
-                    key={tag}
-                    className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-white/10 text-white/80 border border-white/15 backdrop-blur"
-                  >
-                    {tag}
-                  </span>
-                ))}
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-cormorant)', fontWeight: 600, fontSize: '2.5rem', color: 'var(--gold)' }}>
+                {specimen.name.charAt(0)}
               </div>
             )}
-
-            {artist.spotifyData?.followers?.total && (
-              <p className="text-sm text-white/50">
-                {artist.spotifyData.followers.total.toLocaleString()} Spotify followers
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <Link href="/" style={{ fontSize: '0.62rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--fg-muted)', textDecoration: 'none', fontFamily: 'var(--font-syne)' }}>GENUS</Link>
+              {specimen.lineage.map((seg, i) => (
+                <span key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: 'var(--fg-faint)' }}>›</span>
+                  <span style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)' }}>{seg}</span>
+                </span>
+              ))}
+            </div>
+            <h1 className="g-hero-title" style={{ fontFamily: 'var(--font-cormorant)', fontSize: 'clamp(26px, 3.5vw, 44px)', fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.0, color: 'var(--fg)', marginBottom: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {specimen.name}
+            </h1>
+            {(specimen.type || specimen.country) && (
+              <p style={{ fontSize: '0.75rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', letterSpacing: '0.05em' }}>
+                {[specimen.type, specimen.country].filter(Boolean).join(' · ')}
               </p>
             )}
           </div>
         </div>
+        <hr style={{ ...S.rule, margin: 0 }} />
       </div>
 
-      {/* Discography grid */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-8 py-8 space-y-4">
-        <h2 className="text-xl font-semibold">Discography</h2>
-        {releaseGroupsList.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {releaseGroupsList.map((rg: any) => (
-              <ReleaseGroupCover key={rg.id} rg={rg} genres={spotifyGenres} />
-            ))}
+      <div className="g-page">
+
+        <div className="g-3col" style={{ marginTop: '40px' }}>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+            {specimen.classifications.length > 0 && (
+              <div>
+                <p style={S.sectionHeader}>Lineage</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  {specimen.classifications.map(c => (
+                    <Link key={c.taxonomyId} href={`/lineage/${c.slug}`} style={{ textDecoration: 'none', display: 'flex', alignItems: 'baseline', gap: '12px', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: '0.6rem', color: 'var(--fg-faint)', fontFamily: 'var(--font-syne)', letterSpacing: '0.12em', textTransform: 'uppercase', width: '72px', flexShrink: 0 }}>
+                        {LEVEL_LABELS[c.level] ?? c.level}
+                      </span>
+                      <span style={{ fontFamily: 'var(--font-cormorant)', fontSize: '1.1rem', fontWeight: 600, color: 'var(--fg)', letterSpacing: '-0.01em' }}>
+                        {c.name}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {specimen.tags.length > 0 && (
+              <div>
+                <p style={S.sectionHeader}>Sound Signature</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {specimen.tags.slice(0, 8).map(t => (
+                    <span key={t.tag} style={{ fontSize: '0.68rem', padding: '3px 10px', border: '1px solid var(--border)', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', letterSpacing: '0.03em' }}>
+                      {t.tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        ) : (
-          <p className="text-muted-foreground text-sm py-4">No releases found.</p>
+
+          <div>
+            <p style={{ ...S.sectionHeader, textAlign: 'center' }}>Sound Profile</p>
+            {specimen.soundProfile ? (
+              <SoundProfileRadar values={specimen.soundProfile} />
+            ) : (
+              <div style={{ border: '1px solid var(--border)', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <p style={{ fontSize: '0.75rem', color: 'var(--fg-muted)', textAlign: 'center', padding: '20px', fontFamily: 'var(--font-syne)' }}>
+                  Sound Profile not yet computed.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+            <div>
+              <p style={S.sectionHeader}>Origins</p>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <tbody>
+                  {specimen.country && (
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '8px 0', fontSize: '0.72rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)' }}>Geography</td>
+                      <td style={{ padding: '8px 0', fontSize: '0.72rem', color: 'var(--fg)', fontFamily: 'var(--font-mono-custom)', textAlign: 'right' }}>{specimen.country}</td>
+                    </tr>
+                  )}
+                  {specimen.primaryFamily && (
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '8px 0', fontSize: '0.72rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)' }}>Sound Family</td>
+                      <td style={{ padding: '8px 0', textAlign: 'right' }}>
+                        <Link href={`/lineage/${specimen.primaryFamilySlug}`} style={{ fontSize: '0.72rem', color: 'var(--gold)', textDecoration: 'none', fontFamily: 'var(--font-syne)', fontWeight: 600 }}>
+                          {specimen.primaryFamily}
+                        </Link>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {specimen.relatedSpecimens.length > 0 && (
+              <div>
+                <p style={S.sectionHeader}>Related Artists</p>
+                <div>
+                  {specimen.relatedSpecimens.map(rel => (
+                    <Link key={rel.mbid} href={`/artist/${rel.mbid}`} style={{ textDecoration: 'none', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: '0.82rem', color: 'var(--fg)', fontFamily: 'var(--font-syne)', fontWeight: 500 }}>{rel.name}</span>
+                      {rel.primaryFamily && <span style={{ fontSize: '0.6rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', letterSpacing: '0.08em' }}>{rel.primaryFamily}</span>}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {(hybrid.collaborators.length > 0 || hybrid.samplesFrom.length > 0 || hybrid.sampledBy.length > 0) && (
+          <div>
+            <hr style={S.rule} />
+            <div style={{ marginTop: '40px' }}>
+              <p style={S.sectionHeader}>Connections</p>
+              <div className="g-connections-grid">
+
+                {hybrid.collaborators.length > 0 && (
+                  <div>
+                    <p style={{ fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--fg-faint)', fontFamily: 'var(--font-syne)', fontWeight: 600, marginBottom: '12px' }}>Top Collaborators</p>
+                    {hybrid.collaborators.map((a, i) => (
+                      <Link key={a.mbid} href={`/artist/${a.mbid}`} style={{ textDecoration: 'none', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
+                        <span style={{ fontSize: '0.82rem', color: 'var(--fg)', fontFamily: 'var(--font-syne)' }}>{a.name}</span>
+                        <span style={{ ...S.mono, fontSize: '0.62rem' }}>{a.count}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+
+                {hybrid.samplesFrom.length > 0 && (
+                  <div>
+                    <p style={{ fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--fg-faint)', fontFamily: 'var(--font-syne)', fontWeight: 600, marginBottom: '12px' }}>Sampled From</p>
+                    {hybrid.samplesFrom.map(r => (
+                      <div key={r.mbid} style={{ padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: '0.82rem', color: 'var(--fg)', fontFamily: 'var(--font-syne)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                        {r.artistName && <div style={{ fontSize: '0.65rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', marginTop: '1px' }}>{r.artistName}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {hybrid.sampledBy.length > 0 && (
+                  <div>
+                    <p style={{ fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--fg-faint)', fontFamily: 'var(--font-syne)', fontWeight: 600, marginBottom: '12px' }}>Sampled By</p>
+                    {hybrid.sampledBy.map(r => (
+                      <div key={r.mbid} style={{ padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: '0.82rem', color: 'var(--fg)', fontFamily: 'var(--font-syne)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                        {r.artistName && <div style={{ fontSize: '0.65rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', marginTop: '1px' }}>{r.artistName}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
+
+        <ReleasesSection mbid={mbid} familyHue={familyHue} />
+
+      </div>
+    </main>
+  )
+}
+
+async function ReleasesSection({ mbid, familyHue }: { mbid: string; familyHue: number }) {
+  const allRgs = await fetch(
+    `https://musicbrainz.org/ws/2/release-group?artist=${mbid}&limit=100&fmt=json`,
+    { headers: { 'User-Agent': 'MusicGenus/0.1.0 (musicgenus.com)' }, next: { revalidate: 86400 } }
+  )
+    .then(r => r.ok ? r.json() : null)
+    .then(d => (d?.['release-groups'] ?? []) as Array<{ id: string; title: string; 'primary-type'?: string; 'secondary-types'?: string[]; 'first-release-date'?: string }>)
+    .catch(() => [])
+
+  const clean = allRgs.filter(rg => !isSkippable(rg))
+  if (!clean.length) return null
+
+  const sectionHeader: React.CSSProperties = {
+    fontSize: '0.62rem', letterSpacing: '0.2em', textTransform: 'uppercase',
+    color: 'var(--fg-muted)', fontFamily: 'var(--font-syne)', fontWeight: 600,
+    borderBottom: '1px solid var(--border)', paddingBottom: '10px', marginBottom: '20px',
+  }
+
+  return (
+    <div>
+      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '40px 0 0' }} />
+      <div style={{ marginTop: '40px', marginBottom: '40px' }}>
+        <p style={sectionHeader}>Release Timeline</p>
+        <ReleaseTimeline releaseGroups={allRgs} familyHue={familyHue} />
       </div>
 
-      {/* Sound Evolution heatmap */}
-      {genreTimeline.length > 0 && (
-        <div className="max-w-6xl mx-auto px-4 sm:px-8 py-4">
-          <GenreHeatmap data={genreTimeline} />
+      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '0 0 40px' }} />
+      <div>
+        <p style={sectionHeader}>Discography</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '16px' }}>
+          {clean.map(rg => (
+            <div key={rg.id}>
+              <div style={{ aspectRatio: '1', background: 'var(--bg-3)', overflow: 'hidden', border: '1px solid var(--border)', marginBottom: '8px' }}>
+                <img
+                  src={`https://coverartarchive.org/release-group/${rg.id}/front-250`}
+                  alt={rg.title}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </div>
+              <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--fg)', fontFamily: 'var(--font-syne)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {rg.title}
+              </div>
+              {rg['first-release-date'] && (
+                <div style={{ fontSize: '0.6rem', color: 'var(--fg-muted)', fontFamily: 'var(--font-mono-custom)', marginTop: '2px' }}>
+                  {rg['first-release-date'].slice(0, 4)}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
-      )}
-
-      {/* Connections section */}
-      {(topCollaborators.length > 0 || topProducers.length > 0 || samplesFrom.length > 0 || sampledBy.length > 0 || allGenres.length > 0) && (
-        <div className="max-w-6xl mx-auto px-4 sm:px-8 pb-8 space-y-10">
-
-          {/* Top Collaborators */}
-          {topCollaborators.length > 0 && (
-            <section>
-              <h2 className="text-xl font-semibold mb-4">Top Collaborators</h2>
-              <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
-                {topCollaborators.map((a) => (
-                  <Link
-                    key={a.mbid}
-                    href={`/artist/${a.mbid}`}
-                    className="group flex flex-col items-center gap-2 shrink-0 w-24"
-                  >
-                    <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-transparent group-hover:ring-primary transition-all">
-                      <GeneratedAvatar id={a.mbid} name={a.name} genres={[]} size={64} />
-                    </div>
-                    <p className="text-xs text-center font-medium leading-tight line-clamp-2 group-hover:text-primary transition-colors">
-                      {a.name}
-                    </p>
-                    <span className="text-xs text-muted-foreground">{a.count} tracks</span>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Top Producers */}
-          {topProducers.length > 0 && (
-            <section>
-              <h2 className="text-xl font-semibold mb-4">Produced By</h2>
-              <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
-                {topProducers.map((a) => (
-                  <Link
-                    key={a.mbid}
-                    href={`/artist/${a.mbid}`}
-                    className="group flex flex-col items-center gap-2 shrink-0 w-24"
-                  >
-                    <div className="w-16 h-16 rounded-full overflow-hidden ring-2 ring-transparent group-hover:ring-primary transition-all">
-                      <GeneratedAvatar id={a.mbid} name={a.name} genres={[]} size={64} />
-                    </div>
-                    <p className="text-xs text-center font-medium leading-tight line-clamp-2 group-hover:text-primary transition-colors">
-                      {a.name}
-                    </p>
-                    <span className="text-xs text-muted-foreground">{a.count} tracks</span>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Sample History */}
-          {(samplesFrom.length > 0 || sampledBy.length > 0) && (
-            <section>
-              <h2 className="text-xl font-semibold mb-4">Sample History</h2>
-              <div className="grid sm:grid-cols-2 gap-6">
-                {samplesFrom.length > 0 && (
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                      Sampled From ({samplesFrom.length})
-                    </h3>
-                    <div className="space-y-1">
-                      {samplesFrom.map((s) => (
-                        <Link
-                          key={s.rec_mbid}
-                          href={`/recording/${s.rec_mbid}`}
-                          className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/10 transition-colors group"
-                        >
-                          <div className="w-8 h-8 rounded shrink-0 overflow-hidden">
-                            <GeneratedAvatar id={s.rec_mbid} name={s.rec_title} genres={[]} size={32} />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">
-                              {s.rec_title}
-                            </p>
-                            {s.artist_name && (
-                              <p className="text-xs text-muted-foreground truncate">{s.artist_name}</p>
-                            )}
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {sampledBy.length > 0 && (
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                      Sampled By ({sampledBy.length})
-                    </h3>
-                    <div className="space-y-1">
-                      {sampledBy.map((s) => (
-                        <Link
-                          key={s.rec_mbid}
-                          href={`/recording/${s.rec_mbid}`}
-                          className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/10 transition-colors group"
-                        >
-                          <div className="w-8 h-8 rounded shrink-0 overflow-hidden">
-                            <GeneratedAvatar id={s.rec_mbid} name={s.rec_title} genres={[]} size={32} />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">
-                              {s.rec_title}
-                            </p>
-                            {s.artist_name && (
-                              <p className="text-xs text-muted-foreground truncate">{s.artist_name}</p>
-                            )}
-                          </div>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* Connections */}
-          {(topCollaborators.length > 0 || topProducers.length > 0 || samplesFrom.length > 0 || sampledBy.length > 0 || allGenres.length > 0) && (
-            <section>
-              <h2 className="text-xl font-semibold mb-4">Connections</h2>
-              <ConnectionBubbles
-                connections={[
-                  ...topCollaborators.slice(0, 8).map((a) => ({
-                    type: 'performer',
-                    label: `${a.count} collabs`,
-                    targetType: 'artist' as const,
-                    targetId: a.mbid,
-                    targetName: a.name,
-                    importance: a.count,
-                  })),
-                  ...topProducers.slice(0, 6).map((a) => ({
-                    type: 'producer',
-                    label: `${a.count} productions`,
-                    targetType: 'artist' as const,
-                    targetId: a.mbid,
-                    targetName: a.name,
-                    importance: a.count,
-                  })),
-                  ...samplesFrom.slice(0, 4).map((s) => ({
-                    type: 'samples material',
-                    label: 'samples',
-                    targetType: 'recording' as const,
-                    targetId: s.rec_mbid,
-                    targetName: s.artist_name ? `${s.rec_title} (${s.artist_name})` : s.rec_title,
-                    importance: s.popularity || 1,
-                  })),
-                  ...sampledBy.slice(0, 4).map((s) => ({
-                    type: 'sampled by',
-                    label: 'sampled by',
-                    targetType: 'recording' as const,
-                    targetId: s.rec_mbid,
-                    targetName: s.artist_name ? `${s.rec_title} (${s.artist_name})` : s.rec_title,
-                    importance: s.popularity || 1,
-                  })),
-                  ...allGenres.slice(0, 12).map((g) => {
-                    const tagEntry = artist.tags?.find((t: { name: string; count: number }) => t.name === g)
-                    return {
-                      type: 'genre' as const,
-                      label: g,
-                      targetType: 'tag' as const,
-                      targetId: g,
-                      targetName: g,
-                      importance: tagEntry?.count || 1,
-                    }
-                  }),
-                ]}
-              />
-            </section>
-          )}
-        </div>
-      )}
-    </main>
+      </div>
+    </div>
   )
 }

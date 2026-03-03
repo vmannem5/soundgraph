@@ -1,50 +1,76 @@
-import type { Metadata } from "next";
-import { Inter, Space_Grotesk } from "next/font/google";
-import "./globals.css";
-import { NavHeader } from "@/components/nav-header";
-import { ThemeProvider } from "@/components/theme-provider";
+import type { Metadata } from "next"
+import { Cormorant_Garamond, Syne, Space_Mono } from "next/font/google"
+import "./globals.css"
+import Link from "next/link"
+import { ThemeToggle } from "@/components/theme-toggle"
+import Script from "next/script"
 
-const inter = Inter({
+const cormorant = Cormorant_Garamond({
   subsets: ["latin"],
-  variable: "--font-inter",
-});
+  weight: ["300", "400", "500", "600", "700"],
+  style: ["normal", "italic"],
+  variable: "--font-cormorant",
+})
 
-const spaceGrotesk = Space_Grotesk({
+const syne = Syne({
   subsets: ["latin"],
-  variable: "--font-space-grotesk",
-});
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-syne",
+})
+
+const spaceMono = Space_Mono({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  variable: "--font-mono-custom",
+})
 
 export const metadata: Metadata = {
-  title: "MusicGenus",
-  description: "Discover music through connections. Explore the DNA of every song.",
-};
+  title: "GENUS — Music Classification",
+  description: "Every sound has a lineage. Classify artists. Trace the strain.",
+}
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" data-theme="dark">
       <head>
-        {/* Prevent flash of light theme */}
-        <script dangerouslySetInnerHTML={{
-          __html: `
-            (function() {
-              var theme = localStorage.getItem('musicgenus-theme') || 'dark';
-              if (theme === 'dark') document.documentElement.classList.add('dark');
-            })();
-          `
-        }} />
+        <Script id="theme-init" strategy="beforeInteractive">
+          {`(function(){var t=localStorage.getItem('genus-theme')||'dark';document.documentElement.setAttribute('data-theme',t);})();`}
+        </Script>
       </head>
-      <body
-        className={`${inter.variable} ${spaceGrotesk.variable} antialiased`}
+      <body className={`${cormorant.variable} ${syne.variable} ${spaceMono.variable}`}
+        style={{ background: 'var(--bg)', color: 'var(--fg)', transition: 'background 0.25s, color 0.25s' }}
       >
-        <ThemeProvider>
-          <NavHeader />
-          {children}
-        </ThemeProvider>
+        <nav style={{
+          borderBottom: '1px solid var(--border)',
+          padding: '0 32px',
+          height: '52px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          background: 'var(--bg)',
+          backdropFilter: 'blur(8px)',
+          transition: 'background 0.25s, border-color 0.25s',
+        }}>
+          <Link href="/" style={{ display: 'flex', alignItems: 'baseline', gap: '10px', textDecoration: 'none' }}>
+            <span style={{ fontFamily: 'var(--font-cormorant)', fontWeight: 700, fontSize: '1.4rem', letterSpacing: '0.14em', color: 'var(--gold)' }}>
+              GENUS
+            </span>
+            <span className="g-hide-mobile" style={{ fontSize: '0.6rem', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--fg-muted)', fontWeight: 600, fontFamily: 'var(--font-syne)' }}>
+              Sound Classification
+            </span>
+          </Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <Link href="/search" style={{ fontSize: '0.62rem', letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--fg-muted)', textDecoration: 'none', fontFamily: 'var(--font-syne)', fontWeight: 600 }}>
+              Search
+            </Link>
+            <ThemeToggle />
+          </div>
+        </nav>
+        {children}
       </body>
     </html>
-  );
+  )
 }
