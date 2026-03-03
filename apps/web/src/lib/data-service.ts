@@ -1099,6 +1099,21 @@ export async function getArtistSpotifyImage(mbid: string): Promise<string | null
 
 export async function getArtistTheAudioDBImage(mbid: string): Promise<string | null> {
   const tadb = await import('./theaudiodb')
-  const artist = await tadb.getArtistByMBID(mbid)
+  
+  // First try MBID lookup
+  let artist = await tadb.getArtistByMBID(mbid)
+  
+  // If not found, try name lookup from DB
+  if (!artist) {
+    const dbArtist = await prisma.artist.findUnique({
+      where: { mbid },
+      select: { name: true },
+    }).catch(() => null)
+    
+    if (dbArtist?.name) {
+      artist = await tadb.getArtistByName(dbArtist.name)
+    }
+  }
+  
   return tadb.getBestImage(artist)
 }

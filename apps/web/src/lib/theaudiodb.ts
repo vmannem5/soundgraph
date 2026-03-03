@@ -27,6 +27,19 @@ export async function getArtistByMBID(mbid: string): Promise<TheAudioDBArtist | 
   }
 }
 
+export async function getArtistByName(name: string): Promise<TheAudioDBArtist | null> {
+  try {
+    const res = await fetch(`${BASE_URL}/${API_KEY}/search.php?s=${encodeURIComponent(name)}`, {
+      next: { revalidate: 86400 },
+    })
+    if (!res.ok) return null
+    const data: TheAudioDBResponse = await res.json()
+    return data.artists?.[0] ?? null
+  } catch {
+    return null
+  }
+}
+
 export function getBestImage(artist: TheAudioDBArtist | null): string | null {
   if (!artist) return null
   return (
